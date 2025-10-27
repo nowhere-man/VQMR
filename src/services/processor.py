@@ -100,7 +100,7 @@ class TaskProcessor:
 
         # 更新待测视频信息
         video_info = await self._get_video_info(distorted_path)
-        from models import VideoInfo
+        from src.models import VideoInfo
 
         job.metadata.distorted_video = VideoInfo(
             filename=distorted_path.name,

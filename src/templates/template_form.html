@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block title %}{{ '编辑模板' if template_id else '创建模板' }} - VQMR{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">{{ '编辑模板' if template_id else '创建新模板' }}</h1>
+        <p class="mt-1 text-sm text-gray-600">
+            配置视频转码参数，支持批量处理和质量指标计算
+        </p>
+    </div>
+
+    <!-- Form -->
+    <form id="templateForm" class="bg-white rounded-lg shadow-sm p-6 space-y-6">
+        <!-- Basic Info -->
+        <div class="border-b border-gray-200 pb-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">基本信息</h2>
+            
+            <div class="space-y-4">
+                <!-- Name -->
+                <div>
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-1">
+                        模板名称 <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="name" name="name" required maxlength="100"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="例如: H264高质量转码">
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-1">
+                        描述
+                    </label>
+                    <textarea id="description" name="description" rows="3" maxlength="500"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="简要描述此模板的用途"></textarea>
+                    <p class="mt-1 text-xs text-gray-500">最多 500 字符</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Encoder Settings -->
+        <div class="border-b border-gray-200 pb-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">编码器配置</h2>
+            
+            <div class="space-y-4">
+                <!-- Encoder Type -->
+                <div>
+                    <label for="encoder_type" class="block text-sm font-medium text-gray-700 mb-1">
+                        编码器类型 <span class="text-red-500">*</span>
+                    </label>
+                    <select id="encoder_type" name="encoder_type" required
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">请选择</option>
+                        <option value="ffmpeg">FFmpeg</option>
+                        <option value="x264">x264</option>
+                        <option value="x265">x265</option>
+                        <option value="vvenc">VVenC</option>
+                    </select>
+                </div>
+
+                <!-- Encoder Params -->
+                <div>
+                    <label for="encoder_params" class="block text-sm font-medium text-gray-700 mb-1">
+                        编码参数 <span class="text-red-500">*</span>
+                    </label>
+                    <textarea id="encoder_params" name="encoder_params" rows="3" required maxlength="2000"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="例如: -c:v libx264 -preset slow -crf 18"></textarea>
+                    <p class="mt-1 text-xs text-gray-500">最多 2000 字符</p>
+                    
+                    <!-- Parameter Examples -->
+                    <div class="mt-2 bg-gray-50 rounded p-3">
+                        <p class="text-xs font-medium text-gray-700 mb-2">参数示例:</p>
+                        <div class="space-y-1 text-xs text-gray-600">
+                            <div><strong>FFmpeg (H.264):</strong> <code class="bg-white px-1 py-0.5 rounded">-c:v libx264 -preset medium -crf 23</code></div>
+                            <div><strong>FFmpeg (H.265):</strong> <code class="bg-white px-1 py-0.5 rounded">-c:v libx265 -preset medium -crf 28</code></div>
+                            <div><strong>x264:</strong> <code class="bg-white px-1 py-0.5 rounded">--preset medium --crf 23</code></div>
+                            <div><strong>x265:</strong> <code class="bg-white px-1 py-0.5 rounded">--preset medium --crf 28</code></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Path Settings -->
+        <div class="border-b border-gray-200 pb-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">路径配置</h2>
+            
+            <div class="space-y-4">
+                <!-- Source Path -->
+                <div>
+                    <label for="source_path" class="block text-sm font-medium text-gray-700 mb-1">
+                        源视频路径 <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="source_path" name="source_path" required
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="/path/to/videos/*.mp4">
+                    <p class="mt-1 text-xs text-gray-500">支持文件、目录或通配符（例如: *.mp4）</p>
+                </div>
+
+                <!-- Output Dir -->
+                <div>
+                    <label for="output_dir" class="block text-sm font-medium text-gray-700 mb-1">
+                        输出目录 <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="output_dir" name="output_dir" required
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="/path/to/output">
+                </div>
+
+                <!-- Metrics Report Dir -->
+                <div>
+                    <label for="metrics_report_dir" class="block text-sm font-medium text-gray-700 mb-1">
+                        报告目录 <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="metrics_report_dir" name="metrics_report_dir" required
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="/path/to/reports">
+                </div>
+            </div>
+        </div>
+
+        <!-- Advanced Settings -->
+        <div class="pb-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">高级选项</h2>
+            
+            <div class="space-y-4">
+                <!-- Enable Metrics -->
+                <div class="flex items-center">
+                    <input type="checkbox" id="enable_metrics" name="enable_metrics" checked
+                        class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                    <label for="enable_metrics" class="ml-2 block text-sm text-gray-700">
+                        启用质量指标计算
+                    </label>
+                </div>
+
+                <!-- Metrics Types -->
+                <div id="metrics_types_container">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        指标类型
+                    </label>
+                    <div class="space-y-2">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="metric_psnr" name="metrics_types" value="psnr" checked
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                            <label for="metric_psnr" class="ml-2 block text-sm text-gray-700">PSNR（峰值信噪比）</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="metric_ssim" name="metrics_types" value="ssim" checked
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                            <label for="metric_ssim" class="ml-2 block text-sm text-gray-700">SSIM（结构相似性）</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="metric_vmaf" name="metrics_types" value="vmaf" checked
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                            <label for="metric_vmaf" class="ml-2 block text-sm text-gray-700">VMAF（视频多方法评估）</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Output Format -->
+                <div>
+                    <label for="output_format" class="block text-sm font-medium text-gray-700 mb-1">
+                        输出格式
+                    </label>
+                    <select id="output_format" name="output_format"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="mp4">MP4</option>
+                        <option value="mkv">MKV</option>
+                        <option value="avi">AVI</option>
+                        <option value="mov">MOV</option>
+                    </select>
+                </div>
+
+                <!-- Parallel Jobs -->
+                <div>
+                    <label for="parallel_jobs" class="block text-sm font-medium text-gray-700 mb-1">
+                        并行任务数
+                    </label>
+                    <input type="number" id="parallel_jobs" name="parallel_jobs" min="1" max="16" value="1"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <p class="mt-1 text-xs text-gray-500">1-16，1 表示串行执行</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit Buttons -->
+        <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+            <a href="/templates" class="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition">
+                取消
+            </a>
+            <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+                {{ '保存更改' if template_id else '创建模板' }}
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p class="mt-2 text-sm text-gray-600">处理中...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const isEditMode = {{ 'true' if template_id else 'false' }};
+const templateId = {{ "'" + template_id + "'" if template_id else 'null' }};
+
+// Load template data for edit mode
+async function loadTemplate() {
+    if (!isEditMode || !templateId) return;
+
+    try {
+        const response = await fetch(`/api/templates/${templateId}`);
+        if (!response.ok) throw new Error('Failed to load template');
+        
+        const template = await response.json();
+        populateForm(template);
+    } catch (error) {
+        console.error('Error loading template:', error);
+        alert('加载模板失败: ' + error.message);
+    }
+}
+
+// Populate form with template data
+function populateForm(template) {
+    document.getElementById('name').value = template.name || '';
+    document.getElementById('description').value = template.description || '';
+    document.getElementById('encoder_type').value = template.encoder_type || '';
+    document.getElementById('encoder_params').value = template.encoder_params || '';
+    document.getElementById('source_path').value = template.source_path || '';
+    document.getElementById('output_dir').value = template.output_dir || '';
+    document.getElementById('metrics_report_dir').value = template.metrics_report_dir || '';
+    document.getElementById('enable_metrics').checked = template.enable_metrics !== false;
+    document.getElementById('output_format').value = template.output_format || 'mp4';
+    document.getElementById('parallel_jobs').value = template.parallel_jobs || 1;
+
+    // Set metrics types
+    document.querySelectorAll('input[name="metrics_types"]').forEach(checkbox => {
+        checkbox.checked = template.metrics_types && template.metrics_types.includes(checkbox.value);
+    });
+}
+
+// Handle form submission
+document.getElementById('templateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    // Collect form data
+    const formData = {
+        name: document.getElementById('name').value,
+        description: document.getElementById('description').value,
+        encoder_type: document.getElementById('encoder_type').value,
+        encoder_params: document.getElementById('encoder_params').value,
+        source_path: document.getElementById('source_path').value,
+        output_dir: document.getElementById('output_dir').value,
+        metrics_report_dir: document.getElementById('metrics_report_dir').value,
+        enable_metrics: document.getElementById('enable_metrics').checked,
+        output_format: document.getElementById('output_format').value,
+        parallel_jobs: parseInt(document.getElementById('parallel_jobs').value)
+    };
+
+    // Collect metrics types
+    const metricsTypes = [];
+    document.querySelectorAll('input[name="metrics_types"]:checked').forEach(checkbox => {
+        metricsTypes.push(checkbox.value);
+    });
+    formData.metrics_types = metricsTypes;
+
+    // Show loading
+    document.getElementById('loadingOverlay').classList.remove('hidden');
+
+    try {
+        const url = isEditMode ? `/api/templates/${templateId}` : '/api/templates';
+        const method = isEditMode ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to save template');
+        }
+
+        const result = await response.json();
+        
+        // Redirect to template detail page
+        window.location.href = `/templates/${result.template_id || templateId}`;
+    } catch (error) {
+        console.error('Error saving template:', error);
+        alert('保存模板失败: ' + error.message);
+        document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+});
+
+// Toggle metrics types based on enable_metrics checkbox
+document.getElementById('enable_metrics').addEventListener('change', (e) => {
+    const container = document.getElementById('metrics_types_container');
+    if (e.target.checked) {
+        container.classList.remove('opacity-50', 'pointer-events-none');
+    } else {
+        container.classList.add('opacity-50', 'pointer-events-none');
+    }
+});
+
+// Load template data on page load (edit mode)
+if (isEditMode) {
+    loadTemplate();
+}
+</script>
+{% endblock %}

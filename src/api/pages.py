@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from src.models import JobStatus
 from src.services import job_storage
+from src.services.template_storage import template_storage
 
 router = APIRouter(tags=["pages"])
 
@@ -108,4 +109,78 @@ async def jobs_list_page(
             "jobs": jobs_data,
             "status": status,
         },
+    )
+
+
+@router.get("/templates", response_class=HTMLResponse)
+async def templates_list_page(request: Request) -> HTMLResponse:
+    """转码模板列表页面"""
+    return templates.TemplateResponse("templates_list.html", {"request": request})
+
+
+@router.get("/templates/new", response_class=HTMLResponse)
+async def create_template_page(request: Request) -> HTMLResponse:
+    """创建新模板页面"""
+    return templates.TemplateResponse(
+        "template_form.html", {"request": request, "template_id": None}
+    )
+
+
+@router.get("/templates/{template_id}", response_class=HTMLResponse)
+async def template_detail_page(request: Request, template_id: str) -> HTMLResponse:
+    """模板详情页面"""
+    template = template_storage.get_template(template_id)
+
+    if not template:
+        return templates.TemplateResponse(
+            "base.html",
+            {
+                "request": request,
+                "error": f"Template {template_id} not found",
+            },
+            status_code=404,
+        )
+
+    metadata = template.metadata
+
+    context = {
+        "request": request,
+        "template": {
+            "template_id": metadata.template_id,
+            "name": metadata.name,
+            "description": metadata.description,
+            "encoder_type": metadata.encoder_type.value,
+            "encoder_params": metadata.encoder_params,
+            "source_path": metadata.source_path,
+            "output_dir": metadata.output_dir,
+            "metrics_report_dir": metadata.metrics_report_dir,
+            "enable_metrics": metadata.enable_metrics,
+            "metrics_types": metadata.metrics_types,
+            "output_format": metadata.output_format,
+            "parallel_jobs": metadata.parallel_jobs,
+            "created_at": metadata.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "updated_at": metadata.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+        },
+    }
+
+    return templates.TemplateResponse("template_detail.html", context)
+
+
+@router.get("/templates/{template_id}/edit", response_class=HTMLResponse)
+async def edit_template_page(request: Request, template_id: str) -> HTMLResponse:
+    """编辑模板页面"""
+    template = template_storage.get_template(template_id)
+
+    if not template:
+        return templates.TemplateResponse(
+            "base.html",
+            {
+                "request": request,
+                "error": f"Template {template_id} not found",
+            },
+            status_code=404,
+        )
+
+    return templates.TemplateResponse(
+        "template_form.html", {"request": request, "template_id": template_id}
     )

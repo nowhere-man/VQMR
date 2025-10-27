@@ -9,6 +9,10 @@ Web application for video encoding quality analysis using FFmpeg metrics (PSNR, 
 - **Flexible Modes**:
   - Single-file mode: Upload one video, system applies preset encoding
   - Dual-file mode: Upload reference and distorted videos for comparison
+- **Encoding Templates**: Create, manage, and reuse encoding configurations
+  - Support for multiple encoders (FFmpeg, x264, x265, VVenC)
+  - Batch processing with configurable parallelism
+  - Automatic quality metrics calculation
 - **RESTful API**: JSON endpoints for programmatic access
 - **Server-Side Rendering**: Jinja2 templates with Tailwind CSS
 
@@ -168,6 +172,41 @@ GET /api/jobs?status=completed&limit=10
 ```bash
 GET /api/jobs/{job_id}/metrics
 ```
+
+### Encoding Templates
+
+#### Create Template
+```bash
+POST /api/templates
+Content-Type: application/json
+
+{
+  "name": "H264 High Quality",
+  "encoder_type": "ffmpeg",
+  "encoder_params": "-c:v libx264 -preset slow -crf 18",
+  "source_path": "/videos/input/*.mp4",
+  "output_dir": "/videos/output",
+  "metrics_report_dir": "/videos/reports",
+  "parallel_jobs": 4
+}
+```
+
+#### List Templates
+```bash
+GET /api/templates?encoder_type=ffmpeg&limit=10
+```
+
+#### Execute Template
+```bash
+POST /api/templates/{template_id}/execute
+Content-Type: application/json
+
+{
+  "source_files": ["/path/to/video1.mp4", "/path/to/video2.mp4"]
+}
+```
+
+For more details, see [Encoding Templates Documentation](specs/001-video-quality-metrics-report/encoding-templates.md)
 
 ## Development
 
