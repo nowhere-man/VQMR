@@ -147,6 +147,7 @@ async def get_job(job_id: str) -> JobDetailResponse:
         created_at=metadata.created_at,
         updated_at=metadata.updated_at,
         completed_at=metadata.completed_at,
+        template_name=metadata.template_name,
         reference_filename=(
             metadata.reference_video.filename if metadata.reference_video else None
         ),
@@ -155,6 +156,7 @@ async def get_job(job_id: str) -> JobDetailResponse:
         ),
         preset=metadata.preset,
         metrics=metadata.metrics,
+        command_logs=metadata.command_logs,
         error_message=metadata.error_message,
     )
 
@@ -181,3 +183,50 @@ async def list_jobs(
         )
         for job in jobs
     ]
+
+
+@router.post("/compare", response_model=dict)
+async def compare_jobs(job_ids: List[str]) -> dict:
+    """
+    对比多个任务的质量指标
+
+    - **job_ids**: 任务ID列表（至少2个）
+    """
+    if len(job_ids) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="至少需要2个任务进行对比"
+        )
+
+    # 获取所有任务
+    jobs_data = []
+    for job_id in job_ids:
+        job = job_storage.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+        if job.metadata.status != JobStatus.COMPLETED:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Job {job_id} is not completed (status: {job.metadata.status})"
+            )
+
+        if not job.metadata.metrics:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Job {job_id} has no metrics data"
+            )
+
+        jobs_data.append({
+            "job_id": job.metadata.job_id,
+            "created_at": job.metadata.created_at,
+            "mode": job.metadata.mode,
+            "metrics": job.metadata.metrics,
+            "reference_filename": job.metadata.reference_video.filename if job.metadata.reference_video else None,
+            "distorted_filename": job.metadata.distorted_video.filename if job.metadata.distorted_video else None,
+        })
+
+    return {
+        "jobs": jobs_data,
+        "total_jobs": len(jobs_data)
+    }

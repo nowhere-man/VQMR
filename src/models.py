@@ -6,7 +6,7 @@
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,6 +26,29 @@ class JobMode(str, Enum):
     SINGLE_FILE = "single_file"  # 单文件模式：系统执行预设转码
     DUAL_FILE = "dual_file"  # 双文件模式：用户提供参考和待测视频
     COMPARISON = "comparison"  # 对比模式：对比两个模板的执行结果
+    TEMPLATE = "template"  # 模板模式：使用模板执行转码
+
+
+class CommandStatus(str, Enum):
+    """命令执行状态"""
+
+    PENDING = "pending"  # 等待执行
+    RUNNING = "running"  # 正在执行
+    COMPLETED = "completed"  # 已完成
+    FAILED = "failed"  # 失败
+
+
+class CommandLog(BaseModel):
+    """命令执行记录"""
+
+    command_id: str = Field(..., description="命令ID")
+    command_type: str = Field(..., description="命令类型(encode/psnr/ssim/vmaf)")
+    command: str = Field(..., description="完整命令行")
+    status: CommandStatus = Field(default=CommandStatus.PENDING, description="执行状态")
+    source_file: Optional[str] = Field(None, description="源文件")
+    started_at: Optional[datetime] = Field(None, description="开始时间")
+    completed_at: Optional[datetime] = Field(None, description="完成时间")
+    error_message: Optional[str] = Field(None, description="错误信息")
 
 
 class MetricsResult(BaseModel):
@@ -80,10 +103,20 @@ class JobMetadata(BaseModel):
     # 转码参数（单文件模式）
     preset: Optional[str] = Field(None, description="转码预设")
 
+    # 模板信息
+    template_id: Optional[str] = Field(None, description="模板 ID")
+    template_name: Optional[str] = Field(None, description="模板名称")
+
     # 对比任务参数（对比模式）
     template_a_id: Optional[str] = Field(None, description="模板 A ID（对比模式）")
     template_b_id: Optional[str] = Field(None, description="模板 B ID（对比模式）")
     comparison_result: Optional[dict] = Field(None, description="对比结果数据（对比模式）")
+
+    # 执行结果（模板执行模式）
+    execution_result: Optional[dict] = Field(None, description="执行结果数据（模板执行模式）")
+
+    # 命令执行记录
+    command_logs: List[CommandLog] = Field(default_factory=list, description="命令执行记录")
 
     # 指标结果
     metrics: Optional[MetricsResult] = Field(None, description="质量指标结果")

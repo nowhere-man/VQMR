@@ -72,6 +72,53 @@
     </div>
     {% endif %}
 
+    <!-- 命令执行日志 -->
+    {% if job.command_logs %}
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">命令执行日志</h2>
+        <div class="space-y-3">
+            {% for cmd in job.command_logs %}
+            <div class="border rounded-lg p-4 {% if cmd.status == 'running' %}border-blue-300 bg-blue-50{% elif cmd.status == 'completed' %}border-green-300 bg-green-50{% elif cmd.status == 'failed' %}border-red-300 bg-red-50{% else %}border-gray-300 bg-gray-50{% endif %}">
+                <div class="flex items-start justify-between mb-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2 py-1 text-xs font-medium rounded {% if cmd.command_type == 'encode' %}bg-purple-100 text-purple-800{% elif cmd.command_type == 'psnr' %}bg-blue-100 text-blue-800{% elif cmd.command_type == 'ssim' %}bg-green-100 text-green-800{% elif cmd.command_type == 'vmaf' %}bg-pink-100 text-pink-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {{ cmd.command_type.upper() }}
+                        </span>
+                        <span class="px-2 py-1 text-xs font-medium rounded-full {% if cmd.status == 'running' %}bg-blue-100 text-blue-800{% elif cmd.status == 'completed' %}bg-green-100 text-green-800{% elif cmd.status == 'failed' %}bg-red-100 text-red-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {% if cmd.status == 'running' %}🔄 执行中
+                            {% elif cmd.status == 'completed' %}✓ 已完成
+                            {% elif cmd.status == 'failed' %}✗ 失败
+                            {% else %}等待中{% endif %}
+                        </span>
+                    </div>
+                    {% if cmd.source_file %}
+                    <span class="text-xs text-gray-600">{{ cmd.source_file }}</span>
+                    {% endif %}
+                </div>
+                <div class="bg-gray-900 rounded p-3 mb-2">
+                    <code class="text-xs text-green-400 font-mono break-all">{{ cmd.command }}</code>
+                </div>
+                <div class="flex items-center justify-between text-xs text-gray-600">
+                    <div class="flex space-x-4">
+                        {% if cmd.started_at %}
+                        <span>开始: {{ cmd.started_at }}</span>
+                        {% endif %}
+                        {% if cmd.completed_at %}
+                        <span>完成: {{ cmd.completed_at }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if cmd.error_message %}
+                <div class="mt-2 text-xs text-red-700 bg-red-100 rounded p-2">
+                    <strong>错误:</strong> {{ cmd.error_message }}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- 质量指标 -->
     {% if job.metrics %}
     <div class="bg-white rounded-lg shadow-sm p-6">

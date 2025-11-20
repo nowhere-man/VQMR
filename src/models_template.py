@@ -20,60 +20,59 @@ class EncoderType(str, Enum):
     VVENC = "vvenc"  # VVenC (VVC) 编码器
 
 
-class TemplateMode(str, Enum):
-    """模板模式枚举"""
+class SequenceType(str, Enum):
+    """序列类型枚举"""
 
-    TRANSCODE_AND_ANALYZE = "transcode_and_analyze"  # 转码 + 质量分析
-    ANALYZE_ONLY = "analyze_only"  # 仅质量分析（不转码）
-    TRANSCODE_ONLY = "transcode_only"  # 仅转码（不分析）
+    MEDIA = "media"  # 容器格式（mp4, flv等）
+    YUV420P = "yuv420p"  # YUV 420P 原始格式
+
+
+class SourcePathType(str, Enum):
+    """源路径类型枚举"""
+
+    SINGLE_FILE = "single_file"  # 单文件
+    MULTIPLE_FILES = "multiple_files"  # 多文件（逗号分隔）
+    DIRECTORY = "directory"  # 目录
+
+
+class OutputType(str, Enum):
+    """输出类型枚举"""
+
+    SAME_AS_SOURCE = "same_as_source"  # 同源视频类型
+    RAW_STREAM = "raw_stream"  # 原始流（h264/h265/h266等）
 
 
 class EncodingTemplateMetadata(BaseModel):
     """转码模板元数据（持久化到 JSON）"""
 
     template_id: str = Field(..., description="模板 ID (nanoid 12字符)")
+
+    # 第一大类：基本信息
     name: str = Field(..., min_length=1, max_length=100, description="模板名称")
     description: Optional[str] = Field(None, max_length=500, description="模板描述")
 
-    # 模板模式
-    mode: TemplateMode = Field(
-        default=TemplateMode.TRANSCODE_AND_ANALYZE, description="模板模式"
-    )
+    # 第二大类：测试序列配置
+    sequence_type: SequenceType = Field(..., description="序列类型（Media或YUV 420P）")
+    width: Optional[int] = Field(None, gt=0, description="视频宽度（YUV类型必填）")
+    height: Optional[int] = Field(None, gt=0, description="视频高度（YUV类型必填）")
+    fps: Optional[float] = Field(None, gt=0, description="帧率（YUV类型必填）")
+    source_path_type: SourcePathType = Field(..., description="源路径类型（单文件/多文件/目录）")
+    source_path: str = Field(..., min_length=1, description="源视频路径")
 
-    # 编码器配置（仅转码模式需要）
-    encoder_type: Optional[EncoderType] = Field(None, description="编码器类型")
-    encoder_params: Optional[str] = Field(
-        None, max_length=2000, description="编码参数（字符串格式）"
-    )
-    encoder_path: Optional[str] = Field(
-        default=None, description="编码器可执行文件的绝对路径（可选）"
-    )
-    
-    # FFmpeg 路径（用于质量指标计算，转码+分析和仅分析模式可选）
-    ffmpeg_path: Optional[str] = Field(
-        default=None, description="FFmpeg 可执行文件的绝对路径（可选，用于质量指标计算）"
-    )
+    # 第三大类：编码配置
+    encoder_type: EncoderType = Field(..., description="编码器类型（ffmpeg/x264/x265/vvenc）")
+    encoder_path: Optional[str] = Field(None, description="编码器可执行文件路径（可选）")
+    encoder_params: str = Field(..., max_length=2000, description="编码参数（直接传给编码器）")
 
-    # 路径配置
-    source_path: str = Field(
-        ..., min_length=1, description="源视频路径或目录（支持通配符）"
-    )
-    output_dir: Optional[str] = Field(None, min_length=1, description="转码后视频输出目录（仅转码模式需要）")
-    metrics_report_dir: str = Field(..., min_length=1, description="metrics 报告保存目录")
+    # 第四大类：输出配置
+    output_type: OutputType = Field(..., description="输出类型（同源视频类型/Raw Stream）")
+    output_dir: str = Field(..., min_length=1, description="输出目录（保存转码输出的码流）")
+    metrics_report_dir: str = Field(..., min_length=1, description="报告目录（保存Streamlit生成的报告）")
 
-    # 质量指标配置（分析模式需要）
-    enable_metrics: bool = Field(default=True, description="是否启用质量指标计算")
+    # 第五大类：质量指标配置
+    skip_metrics: bool = Field(default=False, description="是否跳过质量指标计算")
     metrics_types: list[str] = Field(
-        default=["psnr", "ssim", "vmaf"], description="要计算的指标类型"
-    )
-    
-    # 参考视频路径（仅 analyze_only 模式需要）
-    reference_path: Optional[str] = Field(
-        None, description="参考视频路径（仅分析模式使用，source_path 为待测视频）"
-    )
-    output_format: str = Field(default="mp4", description="输出视频格式")
-    parallel_jobs: int = Field(
-        default=1, ge=1, le=16, description="并行任务数（1-16）"
+        default_factory=list, description="要计算的指标类型（psnr/ssim/vmaf）"
     )
 
     # 时间戳
@@ -100,7 +99,7 @@ class EncodingTemplateMetadata(BaseModel):
             raise ValueError("路径不能为空或仅包含空白字符")
         return v.strip()
 
-    @field_validator("encoder_path", "ffmpeg_path")
+    @field_validator("encoder_path")
     @classmethod
     def normalize_paths(cls, v: Optional[str]) -> Optional[str]:
         """归一化路径，允许为空"""
@@ -108,28 +107,26 @@ class EncodingTemplateMetadata(BaseModel):
             return None
         value = v.strip()
         return value or None
-    
+
     def model_post_init(self, __context) -> None:
-        """模型初始化后验证，根据模式检查必需字段"""
-        # 转码模式需要编码器配置和输出目录
-        if self.mode in [TemplateMode.TRANSCODE_AND_ANALYZE, TemplateMode.TRANSCODE_ONLY]:
-            if not self.encoder_type:
-                raise ValueError(f"模式 '{self.mode.value}' 需要指定 encoder_type")
-            if not self.encoder_params:
-                raise ValueError(f"模式 '{self.mode.value}' 需要指定 encoder_params")
-            if not self.output_dir:
-                raise ValueError(f"模式 '{self.mode.value}' 需要指定 output_dir")
-        
-        # 转码+分析和仅分析模式强制启用质量指标
-        if self.mode in [TemplateMode.TRANSCODE_AND_ANALYZE, TemplateMode.ANALYZE_ONLY]:
-            self.enable_metrics = True  # 强制启用
-            if not self.metrics_types:
-                raise ValueError(f"模式 '{self.mode.value}' 需要指定 metrics_types")
-        
-        # 仅分析模式需要参考视频路径
-        if self.mode == TemplateMode.ANALYZE_ONLY:
-            if not self.reference_path or not self.reference_path.strip():
-                raise ValueError(f"模式 'analyze_only' 需要指定 reference_path（参考视频路径）")
+        """模型初始化后验证"""
+        # YUV类型必须提供宽、高、fps
+        if self.sequence_type == SequenceType.YUV420P:
+            if not self.width:
+                raise ValueError("YUV 420P类型必须指定视频宽度（width）")
+            if not self.height:
+                raise ValueError("YUV 420P类型必须指定视频高度（height）")
+            if not self.fps:
+                raise ValueError("YUV 420P类型必须指定帧率（fps）")
+
+        # 同源视频类型只能在Media类型时使用
+        if self.output_type == OutputType.SAME_AS_SOURCE:
+            if self.sequence_type != SequenceType.MEDIA:
+                raise ValueError("输出类型为'同源视频类型'时，序列类型必须为Media")
+
+        # 如果不跳过质量指标，必须指定至少一个指标类型
+        if not self.skip_metrics and not self.metrics_types:
+            raise ValueError("启用质量指标计算时必须至少选择一个指标类型（PSNR/SSIM/VMAF）")
 
     model_config = ConfigDict(
         json_encoders={
@@ -167,7 +164,9 @@ class EncodingTemplate(BaseModel):
         """
         results = {
             "source_exists": Path(self.metadata.source_path).exists(),
-            "output_dir_writable": self._check_dir_writable(self.metadata.output_dir),
+            "output_dir_writable": self._check_dir_writable(
+                self.metadata.output_dir
+            ),
             "metrics_dir_writable": self._check_dir_writable(
                 self.metadata.metrics_report_dir
             ),
@@ -183,6 +182,6 @@ class EncodingTemplate(BaseModel):
                 return True
             except Exception:
                 return False
-        return path.is_dir() and path.stat().st_mode & 0o200
+        return path.is_dir() and bool(path.stat().st_mode & 0o200)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

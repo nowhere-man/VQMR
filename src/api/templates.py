@@ -167,10 +167,12 @@ async def create_template(request: CreateTemplateRequest) -> CreateTemplateRespo
     创建新的转码模板
 
     - **name**: 模板名称
+    - **description**: 模板描述
+    - **sequence_type**: 序列类型（Media/YUV 420P）
     - **encoder_type**: 编码器类型（ffmpeg/x264/x265/vvenc）
     - **encoder_params**: 编码参数字符串
-    - **source_path**: 源视频路径或目录
-    - **output_dir**: 输出目录
+    - **source_path**: 源视频路径
+    - **output_type**: 输出类型
     - **metrics_report_dir**: 报告目录
     """
     # 生成模板 ID
@@ -181,19 +183,20 @@ async def create_template(request: CreateTemplateRequest) -> CreateTemplateRespo
         template_id=template_id,
         name=request.name,
         description=request.description,
-        mode=request.mode,
-        encoder_type=request.encoder_type,
-        encoder_params=request.encoder_params,
-        encoder_path=request.encoder_path,
-        ffmpeg_path=request.ffmpeg_path,
+        sequence_type=request.sequence_type,
+        width=request.width,
+        height=request.height,
+        fps=request.fps,
+        source_path_type=request.source_path_type,
         source_path=request.source_path,
-        reference_path=request.reference_path,
+        encoder_type=request.encoder_type,
+        encoder_path=request.encoder_path,
+        encoder_params=request.encoder_params,
+        output_type=request.output_type,
         output_dir=request.output_dir,
         metrics_report_dir=request.metrics_report_dir,
-        enable_metrics=request.enable_metrics,
+        skip_metrics=request.skip_metrics,
         metrics_types=request.metrics_types,
-        output_format=request.output_format,
-        parallel_jobs=request.parallel_jobs,
     )
 
     # 创建模板
@@ -231,19 +234,20 @@ async def get_template(template_id: str) -> TemplateResponse:
         template_id=metadata.template_id,
         name=metadata.name,
         description=metadata.description,
-        mode=metadata.mode,
-        encoder_type=metadata.encoder_type,
-        encoder_params=metadata.encoder_params,
-        encoder_path=metadata.encoder_path,
-        ffmpeg_path=metadata.ffmpeg_path,
+        sequence_type=metadata.sequence_type,
+        width=metadata.width,
+        height=metadata.height,
+        fps=metadata.fps,
+        source_path_type=metadata.source_path_type,
         source_path=metadata.source_path,
-        reference_path=metadata.reference_path,
+        encoder_type=metadata.encoder_type,
+        encoder_path=metadata.encoder_path,
+        encoder_params=metadata.encoder_params,
+        output_type=metadata.output_type,
         output_dir=metadata.output_dir,
         metrics_report_dir=metadata.metrics_report_dir,
-        enable_metrics=metadata.enable_metrics,
+        skip_metrics=metadata.skip_metrics,
         metrics_types=metadata.metrics_types,
-        output_format=metadata.output_format,
-        parallel_jobs=metadata.parallel_jobs,
         created_at=metadata.created_at,
         updated_at=metadata.updated_at,
     )
@@ -271,7 +275,7 @@ async def list_templates(
             template_id=t.metadata.template_id,
             name=t.metadata.name,
             description=t.metadata.description,
-            mode=t.metadata.mode,
+            sequence_type=t.metadata.sequence_type,
             encoder_type=t.metadata.encoder_type,
             created_at=t.metadata.created_at,
         )
@@ -307,32 +311,34 @@ async def update_template(
         template.metadata.name = request.name
     if request.description is not None:
         template.metadata.description = request.description
-    if request.mode is not None:
-        template.metadata.mode = request.mode
-    if request.encoder_type is not None:
-        template.metadata.encoder_type = request.encoder_type
-    if request.encoder_params is not None:
-        template.metadata.encoder_params = request.encoder_params
-    if "encoder_path" in fields_set:
-        template.metadata.encoder_path = request.encoder_path
-    if "ffmpeg_path" in fields_set:
-        template.metadata.ffmpeg_path = request.ffmpeg_path
+    if request.sequence_type is not None:
+        template.metadata.sequence_type = request.sequence_type
+    if request.width is not None:
+        template.metadata.width = request.width
+    if request.height is not None:
+        template.metadata.height = request.height
+    if request.fps is not None:
+        template.metadata.fps = request.fps
+    if request.source_path_type is not None:
+        template.metadata.source_path_type = request.source_path_type
     if request.source_path is not None:
         template.metadata.source_path = request.source_path
-    if "reference_path" in fields_set:
-        template.metadata.reference_path = request.reference_path
+    if request.encoder_type is not None:
+        template.metadata.encoder_type = request.encoder_type
+    if "encoder_path" in fields_set:
+        template.metadata.encoder_path = request.encoder_path
+    if request.encoder_params is not None:
+        template.metadata.encoder_params = request.encoder_params
+    if request.output_type is not None:
+        template.metadata.output_type = request.output_type
     if request.output_dir is not None:
         template.metadata.output_dir = request.output_dir
     if request.metrics_report_dir is not None:
         template.metadata.metrics_report_dir = request.metrics_report_dir
-    if request.enable_metrics is not None:
-        template.metadata.enable_metrics = request.enable_metrics
+    if request.skip_metrics is not None:
+        template.metadata.skip_metrics = request.skip_metrics
     if request.metrics_types is not None:
         template.metadata.metrics_types = request.metrics_types
-    if request.output_format is not None:
-        template.metadata.output_format = request.output_format
-    if request.parallel_jobs is not None:
-        template.metadata.parallel_jobs = request.parallel_jobs
 
     # 保存更新
     template_storage.update_template(template)
@@ -343,19 +349,20 @@ async def update_template(
         template_id=metadata.template_id,
         name=metadata.name,
         description=metadata.description,
-        mode=metadata.mode,
-        encoder_type=metadata.encoder_type,
-        encoder_params=metadata.encoder_params,
-        encoder_path=metadata.encoder_path,
-        ffmpeg_path=metadata.ffmpeg_path,
+        sequence_type=metadata.sequence_type,
+        width=metadata.width,
+        height=metadata.height,
+        fps=metadata.fps,
+        source_path_type=metadata.source_path_type,
         source_path=metadata.source_path,
-        reference_path=metadata.reference_path,
+        encoder_type=metadata.encoder_type,
+        encoder_path=metadata.encoder_path,
+        encoder_params=metadata.encoder_params,
+        output_type=metadata.output_type,
         output_dir=metadata.output_dir,
         metrics_report_dir=metadata.metrics_report_dir,
-        enable_metrics=metadata.enable_metrics,
+        skip_metrics=metadata.skip_metrics,
         metrics_types=metadata.metrics_types,
-        output_format=metadata.output_format,
-        parallel_jobs=metadata.parallel_jobs,
         created_at=metadata.created_at,
         updated_at=metadata.updated_at,
     )
@@ -394,7 +401,10 @@ async def validate_template(template_id: str) -> ValidateTemplateResponse:
     if not template:
         raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
 
-    validation_results = template.validate_paths()
+    try:
+        validation_results = template.validate_paths()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"验证路径时出错: {str(e)}")
 
     all_valid = all(validation_results.values())
 
@@ -409,18 +419,22 @@ async def validate_template(template_id: str) -> ValidateTemplateResponse:
 
 @router.post(
     "/{template_id}/execute",
-    response_model=TemplateExecutionSummary,
+    response_model=dict,
     summary="执行模板转码",
 )
 async def execute_template(
-    template_id: str, request: ExecuteTemplateRequest
-) -> TemplateExecutionSummary:
+    template_id: str, request: ExecuteTemplateRequest, background_tasks: BackgroundTasks
+) -> dict:
     """
     使用模板执行视频转码
 
     - **template_id**: 模板 ID
     - **source_files**: 可选的源文件列表
     """
+    from src.models import CommandLog, CommandStatus
+    from datetime import datetime
+    from nanoid import generate
+
     template = template_storage.get_template(template_id)
 
     if not template:
@@ -433,15 +447,75 @@ async def execute_template(
     if request.source_files:
         source_files = [Path(f) for f in request.source_files]
 
-    # 执行转码
-    try:
-        result = await template_encoder_service.encode_with_template(
-            template, source_files
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"转码失败: {str(e)}")
+    # 创建任务记录
+    job_id = job_storage.generate_job_id()
+    metadata = JobMetadata(
+        job_id=job_id,
+        mode=JobMode.TEMPLATE,
+        status=JobStatus.PENDING,
+        template_a_id=template_id,
+        template_name=template.metadata.name,
+    )
+    job = job_storage.create_job(metadata)
 
-    return TemplateExecutionSummary(**result)
+    # 命令状态更新回调
+    def update_command_status(command_id: str, status: str, error: str = None):
+        for cmd_log in job.metadata.command_logs:
+            if cmd_log.command_id == command_id:
+                cmd_log.status = CommandStatus(status)
+                if status == "running":
+                    cmd_log.started_at = datetime.utcnow()
+                elif status in ("completed", "failed"):
+                    cmd_log.completed_at = datetime.utcnow()
+                if error:
+                    cmd_log.error_message = error
+                break
+        job_storage.update_job(job)
+
+    # 添加命令日志
+    def add_command_log(command_type: str, command: str, source_file: str = None) -> str:
+        command_id = generate(size=8)
+        cmd_log = CommandLog(
+            command_id=command_id,
+            command_type=command_type,
+            command=command,
+            status=CommandStatus.PENDING,
+            source_file=source_file,
+        )
+        job.metadata.command_logs.append(cmd_log)
+        job_storage.update_job(job)
+        return command_id
+
+    # 后台执行转码任务
+    async def execute_encoding():
+        try:
+            job.metadata.status = JobStatus.PROCESSING
+            job_storage.update_job(job)
+
+            result = await template_encoder_service.encode_with_template(
+                template, source_files,
+                add_command_callback=add_command_log,
+                update_status_callback=update_command_status,
+            )
+
+            # 保存执行结果
+            job.metadata.execution_result = result
+            job.metadata.status = JobStatus.COMPLETED
+            job.metadata.completed_at = datetime.utcnow()
+            job_storage.update_job(job)
+
+        except Exception as e:
+            job.metadata.status = JobStatus.FAILED
+            job.metadata.error_message = str(e)
+            job_storage.update_job(job)
+
+    background_tasks.add_task(execute_encoding)
+
+    return {
+        "job_id": job_id,
+        "status": job.metadata.status.value,
+        "message": "转码任务已创建，正在后台执行"
+    }
 
 
 @router.post(
@@ -467,22 +541,16 @@ async def compare_templates(
     meta_a = template_a.metadata
     meta_b = template_b.metadata
 
-    # Validate mode compatibility
-    if meta_a.mode != meta_b.mode:
-        raise HTTPException(status_code=400, detail="两个模板的模式必须一致（转码+分析、仅分析、仅转码）")
+    # 验证编码器类型一致
+    if meta_a.encoder_type != meta_b.encoder_type:
+        raise HTTPException(status_code=400, detail="两个模板的编码器类型必须一致")
 
-    # Validate encoder type for transcode modes
-    if meta_a.mode in ["transcode_and_analyze", "transcode_only"]:
-        if meta_a.encoder_type != meta_b.encoder_type:
-            raise HTTPException(status_code=400, detail="两个模板的编码器类型必须一致")
+    # 验证质量指标设置一致
+    if meta_a.skip_metrics != meta_b.skip_metrics:
+        raise HTTPException(status_code=400, detail="两个模板的质量指标设置必须一致")
 
-    # Validate metrics settings for analyze modes
-    if meta_a.mode in ["transcode_and_analyze", "analyze_only"]:
-        if meta_a.enable_metrics != meta_b.enable_metrics:
-            raise HTTPException(status_code=400, detail="两个模板的质量指标设置必须一致")
-
-        if meta_a.enable_metrics and sorted(meta_a.metrics_types) != sorted(meta_b.metrics_types):
-            raise HTTPException(status_code=400, detail="两个模板的指标类型需保持一致")
+    if not meta_a.skip_metrics and sorted(meta_a.metrics_types) != sorted(meta_b.metrics_types):
+        raise HTTPException(status_code=400, detail="两个模板的指标类型需保持一致")
 
     sources_a = template_encoder_service.resolve_source_files(template_a)
     sources_b = template_encoder_service.resolve_source_files(template_b)
@@ -505,17 +573,17 @@ async def compare_templates(
         template_a_id=request.template_a,
         template_b_id=request.template_b,
     )
-    
+
     job = job_storage.create_job(metadata)
-    
+
     # Schedule comparison execution in background
     async def execute_comparison():
         try:
             job.metadata.status = JobStatus.PROCESSING
             job_storage.update_job(job)
-            
+
             source_paths = [Path(p) for p in normalized_a]
-            
+
             result_a_raw = await template_encoder_service.encode_with_template(
                 template_a, source_paths
             )
@@ -590,19 +658,19 @@ async def compare_templates(
                 template_b=summary_b,
                 comparisons=comparisons,
             )
-            
+
             # Store comparison result
             job.metadata.comparison_result = comparison_result.model_dump()
             job.metadata.status = JobStatus.COMPLETED
             job_storage.update_job(job)
-            
+
         except Exception as e:
             job.metadata.status = JobStatus.FAILED
             job.metadata.error_message = str(e)
             job_storage.update_job(job)
-    
+
     background_tasks.add_task(execute_comparison)
-    
+
     return {
         "job_id": job_id,
         "status": job.metadata.status.value,

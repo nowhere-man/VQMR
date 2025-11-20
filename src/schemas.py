@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from src.models import JobMode, JobStatus, MetricsResult
+from src.models import CommandLog, JobMode, JobStatus, MetricsResult
 
 
 class CreateJobResponse(BaseModel):
@@ -31,6 +31,9 @@ class JobDetailResponse(BaseModel):
     updated_at: datetime = Field(..., description="更新时间")
     completed_at: Optional[datetime] = Field(None, description="完成时间")
 
+    # 模板信息
+    template_name: Optional[str] = Field(None, description="模板名称")
+
     # 视频信息
     reference_filename: Optional[str] = Field(None, description="参考视频文件名")
     distorted_filename: Optional[str] = Field(None, description="待测视频文件名")
@@ -40,6 +43,9 @@ class JobDetailResponse(BaseModel):
 
     # 指标结果
     metrics: Optional[MetricsResult] = Field(None, description="质量指标结果")
+
+    # 命令执行记录
+    command_logs: List[CommandLog] = Field(default_factory=list, description="命令执行记录")
 
     # 错误信息
     error_message: Optional[str] = Field(None, description="错误信息")

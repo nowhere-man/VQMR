@@ -8,88 +8,103 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from src.models_template import EncoderType, TemplateMode
+from src.models_template import EncoderType, SequenceType, SourcePathType, OutputType
 
 
 class CreateTemplateRequest(BaseModel):
     """创建模板请求"""
 
+    # 第一大类：基本信息
     name: str = Field(..., min_length=1, max_length=100, description="模板名称")
     description: Optional[str] = Field(None, max_length=500, description="模板描述")
-    mode: TemplateMode = Field(
-        default=TemplateMode.TRANSCODE_AND_ANALYZE, description="模板模式"
-    )
-    encoder_type: Optional[EncoderType] = Field(None, description="编码器类型")
-    encoder_params: Optional[str] = Field(
-        None, max_length=2000, description="编码参数"
-    )
-    encoder_path: Optional[str] = Field(
-        default=None, max_length=500, description="编码器可执行文件的绝对路径"
-    )
-    ffmpeg_path: Optional[str] = Field(
-        default=None, max_length=500, description="FFmpeg可执行文件的绝对路径"
-    )
-    source_path: str = Field(..., min_length=1, description="源视频路径或目录")
-    reference_path: Optional[str] = Field(None, description="参考视频路径（仅分析模式）")
-    output_dir: Optional[str] = Field(None, min_length=1, description="输出目录（仅转码模式需要）")
+
+    # 第二大类：测试序列配置
+    sequence_type: SequenceType = Field(..., description="序列类型（Media或YUV 420P）")
+    width: Optional[int] = Field(None, gt=0, description="视频宽度（YUV类型必填）")
+    height: Optional[int] = Field(None, gt=0, description="视频高度（YUV类型必填）")
+    fps: Optional[float] = Field(None, gt=0, description="帧率（YUV类型必填）")
+    source_path_type: SourcePathType = Field(..., description="源路径类型（单文件/多文件/目录）")
+    source_path: str = Field(..., min_length=1, description="源视频路径")
+
+    # 第三大类：编码配置
+    encoder_type: EncoderType = Field(..., description="编码器类型（ffmpeg/x264/x265/vvenc）")
+    encoder_path: Optional[str] = Field(None, max_length=500, description="编码器可执行文件路径（可选）")
+    encoder_params: str = Field(..., max_length=2000, description="编码参数（直接传给编码器）")
+
+    # 第四大类：输出配置
+    output_type: OutputType = Field(..., description="输出类型（同源视频类型/Raw Stream）")
+    output_dir: str = Field(..., min_length=1, description="输出目录（保存转码输出的码流）")
     metrics_report_dir: str = Field(..., min_length=1, description="报告目录")
-    enable_metrics: bool = Field(default=True, description="是否启用质量指标计算")
+
+    # 第五大类：质量指标配置
+    skip_metrics: bool = Field(default=False, description="是否跳过质量指标计算")
     metrics_types: list[str] = Field(
-        default=["psnr", "ssim", "vmaf"], description="要计算的指标类型"
-    )
-    output_format: str = Field(default="mp4", description="输出视频格式")
-    parallel_jobs: int = Field(
-        default=1, ge=1, le=16, description="并行任务数（1-16）"
+        default_factory=list, description="要计算的指标类型（psnr/ssim/vmaf）"
     )
 
 
 class UpdateTemplateRequest(BaseModel):
     """更新模板请求"""
 
+    # 第一大类：基本信息
     name: Optional[str] = Field(None, min_length=1, max_length=100, description="模板名称")
     description: Optional[str] = Field(None, max_length=500, description="模板描述")
-    mode: Optional[TemplateMode] = Field(None, description="模板模式")
-    encoder_type: Optional[EncoderType] = Field(None, description="编码器类型")
-    encoder_params: Optional[str] = Field(
-        None, max_length=2000, description="编码参数"
-    )
-    encoder_path: Optional[str] = Field(
-        None, max_length=500, description="编码器可执行文件的绝对路径"
-    )
-    ffmpeg_path: Optional[str] = Field(
-        None, max_length=500, description="FFmpeg可执行文件的绝对路径"
-    )
-    source_path: Optional[str] = Field(None, min_length=1, description="源视频路径或目录")
-    reference_path: Optional[str] = Field(None, description="参考视频路径（仅分析模式）")
-    output_dir: Optional[str] = Field(None, min_length=1, description="输出目录（仅转码模式需要）")
+
+    # 第二大类：测试序列配置
+    sequence_type: Optional[SequenceType] = Field(None, description="序列类型（Media或YUV 420P）")
+    width: Optional[int] = Field(None, gt=0, description="视频宽度（YUV类型必填）")
+    height: Optional[int] = Field(None, gt=0, description="视频高度（YUV类型必填）")
+    fps: Optional[float] = Field(None, gt=0, description="帧率（YUV类型必填）")
+    source_path_type: Optional[SourcePathType] = Field(None, description="源路径类型（单文件/多文件/目录）")
+    source_path: Optional[str] = Field(None, min_length=1, description="源视频路径")
+
+    # 第三大类：编码配置
+    encoder_type: Optional[EncoderType] = Field(None, description="编码器类型（ffmpeg/x264/x265/vvenc）")
+    encoder_path: Optional[str] = Field(None, max_length=500, description="编码器可执行文件路径（可选）")
+    encoder_params: Optional[str] = Field(None, max_length=2000, description="编码参数（直接传给编码器）")
+
+    # 第四大类：输出配置
+    output_type: Optional[OutputType] = Field(None, description="输出类型（同源视频类型/Raw Stream）")
+    output_dir: Optional[str] = Field(None, min_length=1, description="输出目录（保存转码输出的码流）")
     metrics_report_dir: Optional[str] = Field(None, min_length=1, description="报告目录")
-    enable_metrics: Optional[bool] = Field(None, description="是否启用质量指标计算")
-    metrics_types: Optional[list[str]] = Field(None, description="要计算的指标类型")
-    output_format: Optional[str] = Field(None, description="输出视频格式")
-    parallel_jobs: Optional[int] = Field(
-        None, ge=1, le=16, description="并行任务数（1-16）"
-    )
+
+    # 第五大类：质量指标配置
+    skip_metrics: Optional[bool] = Field(None, description="是否跳过质量指标计算")
+    metrics_types: Optional[list[str]] = Field(None, description="要计算的指标类型（psnr/ssim/vmaf）")
 
 
 class TemplateResponse(BaseModel):
     """模板响应"""
 
     template_id: str = Field(..., description="模板 ID")
+
+    # 第一大类：基本信息
     name: str = Field(..., description="模板名称")
     description: Optional[str] = Field(None, description="模板描述")
-    mode: TemplateMode = Field(..., description="模板模式")
-    encoder_type: Optional[EncoderType] = Field(None, description="编码器类型")
-    encoder_params: Optional[str] = Field(None, description="编码参数")
-    encoder_path: Optional[str] = Field(None, description="编码器可执行文件的绝对路径")
-    ffmpeg_path: Optional[str] = Field(None, description="FFmpeg可执行文件的绝对路径")
-    source_path: str = Field(..., description="源视频路径或目录")
-    reference_path: Optional[str] = Field(None, description="参考视频路径（仅分析模式）")
-    output_dir: Optional[str] = Field(None, description="输出目录（仅转码模式需要）")
+
+    # 第二大类：测试序列配置
+    sequence_type: SequenceType = Field(..., description="序列类型（Media或YUV 420P）")
+    width: Optional[int] = Field(None, description="视频宽度（YUV类型必填）")
+    height: Optional[int] = Field(None, description="视频高度（YUV类型必填）")
+    fps: Optional[float] = Field(None, description="帧率（YUV类型必填）")
+    source_path_type: SourcePathType = Field(..., description="源路径类型（单文件/多文件/目录）")
+    source_path: str = Field(..., description="源视频路径")
+
+    # 第三大类：编码配置
+    encoder_type: EncoderType = Field(..., description="编码器类型（ffmpeg/x264/x265/vvenc）")
+    encoder_path: Optional[str] = Field(None, description="编码器可执行文件路径（可选）")
+    encoder_params: str = Field(..., description="编码参数（直接传给编码器）")
+
+    # 第四大类：输出配置
+    output_type: OutputType = Field(..., description="输出类型（同源视频类型/Raw Stream）")
+    output_dir: str = Field(..., description="输出目录（保存转码输出的码流）")
     metrics_report_dir: str = Field(..., description="报告目录")
-    enable_metrics: bool = Field(..., description="是否启用质量指标计算")
-    metrics_types: list[str] = Field(..., description="要计算的指标类型")
-    output_format: str = Field(..., description="输出视频格式")
-    parallel_jobs: int = Field(..., description="并行任务数")
+
+    # 第五大类：质量指标配置
+    skip_metrics: bool = Field(..., description="是否跳过质量指标计算")
+    metrics_types: list[str] = Field(..., description="要计算的指标类型（psnr/ssim/vmaf）")
+
+    # 时间戳
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
 
@@ -184,8 +199,8 @@ class TemplateListItem(BaseModel):
     template_id: str = Field(..., description="模板 ID")
     name: str = Field(..., description="模板名称")
     description: Optional[str] = Field(None, description="模板描述")
-    mode: TemplateMode = Field(..., description="模板模式")
-    encoder_type: Optional[EncoderType] = Field(None, description="编码器类型")
+    sequence_type: SequenceType = Field(..., description="序列类型")
+    encoder_type: EncoderType = Field(..., description="编码器类型")
     created_at: datetime = Field(..., description="创建时间")
 
 

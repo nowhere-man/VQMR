@@ -22,12 +22,6 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
-@router.get("/jobs/new", response_class=HTMLResponse)
-async def create_job_page(request: Request) -> HTMLResponse:
-    """创建新任务页面"""
-    return templates.TemplateResponse("create_job.html", {"request": request})
-
-
 @router.get("/jobs/{job_id}", response_class=HTMLResponse)
 async def job_report_page(request: Request, job_id: str) -> HTMLResponse:
     """任务报告页面"""
@@ -60,6 +54,7 @@ async def job_report_page(request: Request, job_id: str) -> HTMLResponse:
                 if metadata.completed_at
                 else None
             ),
+            "template_name": metadata.template_name,
             "reference_filename": (
                 metadata.reference_video.filename if metadata.reference_video else None
             ),
@@ -72,6 +67,19 @@ async def job_report_page(request: Request, job_id: str) -> HTMLResponse:
             "template_a_id": metadata.template_a_id,
             "template_b_id": metadata.template_b_id,
             "comparison_result": metadata.comparison_result,
+            "command_logs": [
+                {
+                    "command_id": cmd.command_id,
+                    "command_type": cmd.command_type,
+                    "command": cmd.command,
+                    "status": cmd.status.value,
+                    "source_file": cmd.source_file,
+                    "started_at": cmd.started_at.strftime("%Y-%m-%d %H:%M:%S") if cmd.started_at else None,
+                    "completed_at": cmd.completed_at.strftime("%Y-%m-%d %H:%M:%S") if cmd.completed_at else None,
+                    "error_message": cmd.error_message,
+                }
+                for cmd in metadata.command_logs
+            ],
         },
     }
 
@@ -99,8 +107,13 @@ async def jobs_list_page(
         {
             "job_id": job.metadata.job_id,
             "status": job.metadata.status.value,
-            "mode": job.metadata.mode.value,
+            "template_name": job.metadata.template_name or "N/A",
             "created_at": job.metadata.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "completed_at": (
+                job.metadata.completed_at.strftime("%Y-%m-%d %H:%M:%S")
+                if job.metadata.completed_at
+                else "-"
+            ),
         }
         for job in jobs
     ]
@@ -161,19 +174,20 @@ async def template_detail_page(request: Request, template_id: str) -> HTMLRespon
             "template_id": metadata.template_id,
             "name": metadata.name,
             "description": metadata.description,
-            "mode": metadata.mode.value,
+            "sequence_type": metadata.sequence_type.value,
+            "width": metadata.width,
+            "height": metadata.height,
+            "fps": metadata.fps,
+            "source_path_type": metadata.source_path_type.value,
+            "source_path": metadata.source_path,
             "encoder_type": metadata.encoder_type.value if metadata.encoder_type else None,
             "encoder_params": metadata.encoder_params,
             "encoder_path": metadata.encoder_path,
-            "ffmpeg_path": metadata.ffmpeg_path,
-            "source_path": metadata.source_path,
-            "reference_path": metadata.reference_path,
+            "output_type": metadata.output_type.value,
             "output_dir": metadata.output_dir,
             "metrics_report_dir": metadata.metrics_report_dir,
-            "enable_metrics": metadata.enable_metrics,
+            "skip_metrics": metadata.skip_metrics,
             "metrics_types": metadata.metrics_types,
-            "output_format": metadata.output_format,
-            "parallel_jobs": metadata.parallel_jobs,
             "created_at": metadata.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             "updated_at": metadata.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
         },

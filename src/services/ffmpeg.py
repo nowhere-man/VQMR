@@ -97,6 +97,10 @@ class FFmpegService:
         reference_path: Path,
         distorted_path: Path,
         output_log: Path,
+        ref_width: int = None,
+        ref_height: int = None,
+        ref_fps: float = None,
+        ref_pix_fmt: str = "yuv420p",
     ) -> Dict[str, float]:
         """
         计算 PSNR 指标
@@ -105,22 +109,39 @@ class FFmpegService:
             reference_path: 参考视频路径
             distorted_path: 待测视频路径
             output_log: PSNR 日志输出路径
+            ref_width: 参考视频宽度（YUV格式必需）
+            ref_height: 参考视频高度（YUV格式必需）
+            ref_fps: 参考视频帧率（YUV格式必需）
+            ref_pix_fmt: 参考视频像素格式
 
         Returns:
             包含 psnr_avg, psnr_y, psnr_u, psnr_v 的字典
         """
-        cmd = [
-            self.ffmpeg_path,
-            "-i",
-            str(distorted_path),
-            "-i",
-            str(reference_path),
+        cmd = [self.ffmpeg_path]
+
+        # 添加distorted视频输入
+        cmd.extend(["-i", str(distorted_path)])
+
+        # 如果是YUV格式，需要为reference视频指定参数
+        if ref_width and ref_height:
+            cmd.extend([
+                "-f", "rawvideo",
+                "-pix_fmt", ref_pix_fmt,
+                "-s", f"{ref_width}x{ref_height}",
+            ])
+            if ref_fps:
+                cmd.extend(["-r", str(ref_fps)])
+
+        # 添加reference视频输入
+        cmd.extend(["-i", str(reference_path)])
+
+        cmd.extend([
             "-lavfi",
             f"psnr=stats_file={output_log}",
             "-f",
             "null",
             "-",
-        ]
+        ])
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -148,6 +169,10 @@ class FFmpegService:
         reference_path: Path,
         distorted_path: Path,
         output_log: Path,
+        ref_width: int = None,
+        ref_height: int = None,
+        ref_fps: float = None,
+        ref_pix_fmt: str = "yuv420p",
     ) -> Dict[str, float]:
         """
         计算 SSIM 指标
@@ -156,22 +181,39 @@ class FFmpegService:
             reference_path: 参考视频路径
             distorted_path: 待测视频路径
             output_log: SSIM 日志输出路径
+            ref_width: 参考视频宽度（YUV格式必需）
+            ref_height: 参考视频高度（YUV格式必需）
+            ref_fps: 参考视频帧率（YUV格式必需）
+            ref_pix_fmt: 参考视频像素格式
 
         Returns:
             包含 ssim_avg, ssim_y, ssim_u, ssim_v 的字典
         """
-        cmd = [
-            self.ffmpeg_path,
-            "-i",
-            str(distorted_path),
-            "-i",
-            str(reference_path),
+        cmd = [self.ffmpeg_path]
+
+        # 添加distorted视频输入
+        cmd.extend(["-i", str(distorted_path)])
+
+        # 如果是YUV格式，需要为reference视频指定参数
+        if ref_width and ref_height:
+            cmd.extend([
+                "-f", "rawvideo",
+                "-pix_fmt", ref_pix_fmt,
+                "-s", f"{ref_width}x{ref_height}",
+            ])
+            if ref_fps:
+                cmd.extend(["-r", str(ref_fps)])
+
+        # 添加reference视频输入
+        cmd.extend(["-i", str(reference_path)])
+
+        cmd.extend([
             "-lavfi",
             f"ssim=stats_file={output_log}",
             "-f",
             "null",
             "-",
-        ]
+        ])
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -200,6 +242,10 @@ class FFmpegService:
         distorted_path: Path,
         output_json: Path,
         model_path: Optional[Path] = None,
+        ref_width: int = None,
+        ref_height: int = None,
+        ref_fps: float = None,
+        ref_pix_fmt: str = "yuv420p",
     ) -> Dict[str, float]:
         """
         计算 VMAF 指标
@@ -208,27 +254,49 @@ class FFmpegService:
             reference_path: 参考视频路径
             distorted_path: 待测视频路径
             output_json: VMAF JSON 输出路径
-            model_path: VMAF 模型文件路径
+            model_path: VMAF 模型文件路径（可选，不提供则使用FFmpeg内置模型）
+            ref_width: 参考视频宽度（YUV格式必需）
+            ref_height: 参考视频高度（YUV格式必需）
+            ref_fps: 参考视频帧率（YUV格式必需）
+            ref_pix_fmt: 参考视频像素格式
 
         Returns:
             包含 vmaf_mean, vmaf_harmonic_mean 的字典
         """
-        model = model_path or settings.vmaf_model_path
-        if not model or not model.exists():
-            raise RuntimeError(f"VMAF model not found: {model}")
+        cmd = [self.ffmpeg_path]
 
-        cmd = [
-            self.ffmpeg_path,
-            "-i",
-            str(distorted_path),
-            "-i",
-            str(reference_path),
+        # 添加distorted视频输入
+        cmd.extend(["-i", str(distorted_path)])
+
+        # 如果是YUV格式，需要为reference视频指定参数
+        if ref_width and ref_height:
+            cmd.extend([
+                "-f", "rawvideo",
+                "-pix_fmt", ref_pix_fmt,
+                "-s", f"{ref_width}x{ref_height}",
+            ])
+            if ref_fps:
+                cmd.extend(["-r", str(ref_fps)])
+
+        # 添加reference视频输入
+        cmd.extend(["-i", str(reference_path)])
+
+        # 构建VMAF滤镜参数
+        # 如果提供了model_path且存在，使用指定的模型文件
+        # 否则使用FFmpeg内置模型
+        if model_path and model_path.exists():
+            vmaf_filter = f"libvmaf=model_path={model_path}:log_path={output_json}:log_fmt=json"
+        else:
+            # 使用FFmpeg内置模型
+            vmaf_filter = f"libvmaf=log_path={output_json}:log_fmt=json"
+
+        cmd.extend([
             "-lavfi",
-            f"libvmaf=model_path={model}:log_path={output_json}:log_fmt=json",
+            vmaf_filter,
             "-f",
             "null",
             "-",
-        ]
+        ])
 
         try:
             process = await asyncio.create_subprocess_exec(

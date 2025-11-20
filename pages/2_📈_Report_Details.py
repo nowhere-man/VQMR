@@ -62,7 +62,7 @@ with st.expander("📝 模板详细参数", expanded=True):
     col1, col2 = st.columns(2)
     with col1:
         st.write(f"**模板ID**: `{report['template_id']}`")
-        st.write(f"**模式**: {report.get('mode', 'N/A')}")
+        st.write(f"**序列类型**: {report.get('sequence_type', 'N/A')}")
         if report.get('template_description'):
             st.write(f"**描述**: {report['template_description']}")
     with col2:

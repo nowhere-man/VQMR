@@ -10,19 +10,17 @@
             <div class="flex-1">
                 <div class="flex items-center flex-wrap gap-2">
                     <h1 class="text-2xl font-bold text-gray-900">{{ template.name }}</h1>
-                    
-                    <!-- Mode Badge -->
-                    {% set mode_info = {
-                        'transcode_and_analyze': {'label': '转码+分析', 'color': 'bg-blue-100 text-blue-800'},
-                        'analyze_only': {'label': '仅分析', 'color': 'bg-green-100 text-green-800'},
-                        'transcode_only': {'label': '仅转码', 'color': 'bg-purple-100 text-purple-800'}
+
+                    <!-- Sequence Type Badge -->
+                    {% set sequence_colors = {
+                        'media': 'bg-blue-100 text-blue-800',
+                        'yuv420p': 'bg-purple-100 text-purple-800'
                     } %}
-                    <span class="px-3 py-1 rounded-full text-sm font-medium {{ mode_info.get(template.mode, {}).get('color', 'bg-gray-100 text-gray-800') }}">
-                        {{ mode_info.get(template.mode, {}).get('label', template.mode) }}
+                    <span class="px-3 py-1 rounded-full text-sm font-medium {{ sequence_colors.get(template.sequence_type, 'bg-gray-100 text-gray-800') }}">
+                        {{ 'Media' if template.sequence_type == 'media' else 'YUV 420P' }}
                     </span>
-                    
-                    <!-- Encoder Badge (only if encoder is configured) -->
-                    {% if template.encoder_type %}
+
+                    <!-- Encoder Badge -->
                     {% set encoder_colors = {
                         'ffmpeg': 'bg-indigo-100 text-indigo-800',
                         'x264': 'bg-teal-100 text-teal-800',
@@ -31,6 +29,16 @@
                     } %}
                     <span class="px-3 py-1 rounded-full text-sm font-medium {{ encoder_colors.get(template.encoder_type, 'bg-gray-100 text-gray-800') }}">
                         {{ template.encoder_type.upper() }}
+                    </span>
+
+                    <!-- Metrics Badge -->
+                    {% if not template.skip_metrics %}
+                    <span class="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                        质量指标已启用
+                    </span>
+                    {% else %}
+                    <span class="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+                        质量指标已跳过
                     </span>
                     {% endif %}
                 </div>
@@ -65,10 +73,74 @@
 
     <!-- Configuration -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- Encoder Configuration (for transcode modes) -->
-        {% if template.mode in ['transcode_and_analyze', 'transcode_only'] %}
+        <!-- 第一大类：基本信息 -->
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">编码器配置</h2>
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">基本信息</h2>
+            <dl class="space-y-3">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">模板名称</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ template.name }}</dd>
+                </div>
+                {% if template.description %}
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">描述</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ template.description }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+
+        <!-- 第二大类：测试序列配置 -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">测试序列配置</h2>
+            <dl class="space-y-3">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">序列类型</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {{ 'Media（容器格式）' if template.sequence_type == 'media' else 'YUV 420P（原始格式）' }}
+                    </dd>
+                </div>
+
+                {% if template.sequence_type == 'yuv420p' %}
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">宽度</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ template.width }} px</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">高度</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ template.height }} px</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">帧率</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ template.fps }} fps</dd>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">源路径类型</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {% if template.source_path_type == 'single_file' %}
+                            单文件
+                        {% elif template.source_path_type == 'multiple_files' %}
+                            多文件（逗号分隔）
+                        {% else %}
+                            目录
+                        {% endif %}
+                    </dd>
+                </div>
+
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">源视频路径</dt>
+                    <dd class="mt-1 text-sm text-gray-900 font-mono break-all bg-gray-50 p-2 rounded">{{ template.source_path }}</dd>
+                </div>
+            </dl>
+        </div>
+
+        <!-- 第三大类：编码配置 -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">编码配置</h2>
             <dl class="space-y-3">
                 <div>
                     <dt class="text-sm font-medium text-gray-500">编码器类型</dt>
@@ -88,60 +160,27 @@
                 </div>
             </dl>
         </div>
-        {% endif %}
 
-        <!-- FFmpeg Configuration (for modes that calculate metrics) -->
-        {% if template.mode in ['transcode_and_analyze', 'analyze_only'] %}
+        <!-- 第四大类：输出配置 -->
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">FFmpeg 配置（质量指标计算）</h2>
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">输出配置</h2>
             <dl class="space-y-3">
                 <div>
-                    <dt class="text-sm font-medium text-gray-500">FFmpeg 路径</dt>
-                    <dd class="mt-1 text-sm text-gray-900 font-mono break-all">
-                        {{ template.ffmpeg_path or '未配置（使用默认 ffmpeg 命令）' }}
-                    </dd>
-                    <p class="mt-1 text-xs text-gray-500">用于计算 PSNR、SSIM、VMAF 等质量指标</p>
-                </div>
-            </dl>
-        </div>
-        {% endif %}
-
-        <!-- Path Configuration -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">路径配置</h2>
-            <dl class="space-y-3">
-                <div>
-                    <dt class="text-sm font-medium text-gray-500">
-                        {% if template.mode == 'analyze_only' %}待测视频路径{% else %}源视频路径{% endif %}
-                    </dt>
-                    <dd class="mt-1 text-sm text-gray-900 font-mono break-all bg-gray-50 p-2 rounded">{{ template.source_path }}</dd>
-                    <dd class="mt-1 text-xs text-gray-500">
-                        {% if template.mode == 'analyze_only' %}
-                        待测视频文件或目录，将与参考视频对比质量
-                        {% else %}
-                        支持: 单个文件 | 多个文件（逗号分隔） | 目录路径
-                        {% endif %}
+                    <dt class="text-sm font-medium text-gray-500">输出类型</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {{ '同源视频类型' if template.output_type == 'same_as_source' else 'Raw Stream (h264/h265/h266等)' }}
                     </dd>
                 </div>
-                
-                <!-- Reference Path (analyze_only mode only) -->
-                {% if template.mode == 'analyze_only' and template.reference_path %}
-                <div>
-                    <dt class="text-sm font-medium text-gray-500">参考视频路径（原始视频）</dt>
-                    <dd class="mt-1 text-sm text-gray-900 font-mono break-all bg-gray-50 p-2 rounded">{{ template.reference_path }}</dd>
-                    <dd class="mt-1 text-xs text-gray-500">
-                        原始视频路径，用于与待测视频对比质量
-                    </dd>
-                </div>
-                {% endif %}
-                
-                <!-- Output Dir (only for transcode modes) -->
-                {% if template.mode in ['transcode_and_analyze', 'transcode_only'] %}
                 <div>
                     <dt class="text-sm font-medium text-gray-500">输出目录</dt>
-                    <dd class="mt-1 text-sm text-gray-900 font-mono break-all">{{ template.output_dir }}</dd>
+                    <dd class="mt-1 text-sm text-gray-900 font-mono break-all bg-gray-50 p-2 rounded">{{ template.output_dir }}</dd>
                 </div>
-                {% endif %}
+                <div class="bg-blue-50 border border-blue-200 rounded p-2">
+                    <p class="text-xs text-blue-800">
+                        <strong>输出规则：</strong> 文件名 = 源文件前缀 + "_encode" + 扩展名<br>
+                        <strong>输出目录：</strong> 上方指定的输出目录
+                    </p>
+                </div>
                 <div>
                     <dt class="text-sm font-medium text-gray-500">报告目录</dt>
                     <dd class="mt-1 text-sm text-gray-900 font-mono break-all">{{ template.metrics_report_dir }}</dd>
@@ -149,12 +188,26 @@
             </dl>
         </div>
 
-        <!-- Quality Metrics (for analyze modes) -->
-        {% if template.mode in ['transcode_and_analyze', 'analyze_only'] %}
+        <!-- 第五大类：质量指标配置 -->
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">质量指标（自动启用）</h2>
-            <p class="text-sm text-gray-600 mb-4">此模式将自动计算以下质量指标：</p>
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">质量指标配置</h2>
             <dl class="space-y-3">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">是否跳过质量指标计算</dt>
+                    <dd class="mt-1 text-sm">
+                        {% if template.skip_metrics %}
+                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            是（已跳过）
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            否（已启用）
+                        </span>
+                        {% endif %}
+                    </dd>
+                </div>
+
+                {% if not template.skip_metrics %}
                 <div>
                     <dt class="text-sm font-medium text-gray-500">指标类型</dt>
                     <dd class="mt-1 flex flex-wrap gap-2">
@@ -165,22 +218,7 @@
                         {% endfor %}
                     </dd>
                 </div>
-            </dl>
-        </div>
-        {% endif %}
-
-        <!-- Advanced Options -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">高级选项</h2>
-            <dl class="space-y-3">
-                <div>
-                    <dt class="text-sm font-medium text-gray-500">输出格式</dt>
-                    <dd class="mt-1 text-sm text-gray-900">{{ template.output_format }}</dd>
-                </div>
-                <div>
-                    <dt class="text-sm font-medium text-gray-500">并行任务数</dt>
-                    <dd class="mt-1 text-sm text-gray-900">{{ template.parallel_jobs }}</dd>
-                </div>
+                {% endif %}
             </dl>
         </div>
     </div>
@@ -209,7 +247,7 @@
                     <label class="block text-sm font-medium text-gray-700 mb-2">
                         源文件（可选，不填则使用模板配置）
                     </label>
-                    <textarea id="sourceFiles" rows="4" 
+                    <textarea id="sourceFiles" rows="4"
                         class="w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="每行一个文件路径，例如:&#10;/path/to/video1.mp4&#10;/path/to/video2.mp4"></textarea>
                 </div>
@@ -263,15 +301,20 @@
 {% block scripts %}
 <script>
 const templateId = '{{ template.template_id }}';
+const templatePaths = {
+    source_path: '{{ template.source_path }}',
+    output_dir: '{{ template.output_dir }}',
+    metrics_report_dir: '{{ template.metrics_report_dir }}'
+};
 
 // Validate paths
 document.getElementById('validateBtn').addEventListener('click', async () => {
     document.getElementById('loadingOverlay').classList.remove('hidden');
-    
+
     try {
         const response = await fetch(`/api/templates/${templateId}/validate`);
         if (!response.ok) throw new Error('Validation failed');
-        
+
         const result = await response.json();
         showValidationResults(result);
     } catch (error) {
@@ -285,31 +328,40 @@ document.getElementById('validateBtn').addEventListener('click', async () => {
 function showValidationResults(result) {
     const container = document.getElementById('validationResults');
     const content = container.querySelector('.space-y-2');
-    
+
     content.innerHTML = `
         <div class="flex items-center space-x-2">
             <svg class="w-5 h-5 ${result.source_exists ? 'text-green-600' : 'text-red-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${result.source_exists ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}"></path>
             </svg>
-            <span class="text-sm">源路径: ${result.source_exists ? '存在' : '不存在'}</span>
+            <span class="text-sm">
+                源路径: ${result.source_exists ? '存在' : '不存在'}
+                ${!result.source_exists ? '<br><code class="text-xs bg-gray-100 px-1 rounded">' + templatePaths.source_path + '</code>' : ''}
+            </span>
         </div>
         <div class="flex items-center space-x-2">
             <svg class="w-5 h-5 ${result.output_dir_writable ? 'text-green-600' : 'text-red-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${result.output_dir_writable ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}"></path>
             </svg>
-            <span class="text-sm">输出目录: ${result.output_dir_writable ? '可写' : '不可写'}</span>
+            <span class="text-sm">
+                输出目录: ${result.output_dir_writable ? '可写' : '不可写'}
+                ${!result.output_dir_writable ? '<br><code class="text-xs bg-gray-100 px-1 rounded">' + templatePaths.output_dir + '</code>' : ''}
+            </span>
         </div>
         <div class="flex items-center space-x-2">
             <svg class="w-5 h-5 ${result.metrics_dir_writable ? 'text-green-600' : 'text-red-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${result.metrics_dir_writable ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}"></path>
             </svg>
-            <span class="text-sm">报告目录: ${result.metrics_dir_writable ? '可写' : '不可写'}</span>
+            <span class="text-sm">
+                报告目录: ${result.metrics_dir_writable ? '可写' : '不可写'}
+                ${!result.metrics_dir_writable ? '<br><code class="text-xs bg-gray-100 px-1 rounded">' + templatePaths.metrics_report_dir + '</code>' : ''}
+            </span>
         </div>
         <div class="mt-4 p-3 rounded ${result.all_valid ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}">
             <p class="text-sm font-medium">${result.all_valid ? '✓ 所有路径验证通过' : '✗ 部分路径验证失败'}</p>
         </div>
     `;
-    
+
     container.classList.remove('hidden');
 }
 
@@ -325,22 +377,22 @@ document.getElementById('cancelExecute').addEventListener('click', () => {
 document.getElementById('confirmExecute').addEventListener('click', async () => {
     const sourceFilesText = document.getElementById('sourceFiles').value.trim();
     const sourceFiles = sourceFilesText ? sourceFilesText.split('\n').filter(f => f.trim()) : null;
-    
+
     document.getElementById('executeModal').classList.add('hidden');
     document.getElementById('loadingOverlay').classList.remove('hidden');
-    
+
     try {
         const response = await fetch(`/api/templates/${templateId}/execute`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ source_files: sourceFiles })
         });
-        
+
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Execution failed');
         }
-        
+
         const result = await response.json();
         alert(`转码完成！\n成功: ${result.successful}\n失败: ${result.failed}`);
     } catch (error) {
@@ -363,14 +415,14 @@ document.getElementById('cancelDelete').addEventListener('click', () => {
 document.getElementById('confirmDelete').addEventListener('click', async () => {
     document.getElementById('deleteModal').classList.add('hidden');
     document.getElementById('loadingOverlay').classList.remove('hidden');
-    
+
     try {
         const response = await fetch(`/api/templates/${templateId}`, {
             method: 'DELETE'
         });
-        
+
         if (!response.ok) throw new Error('Failed to delete template');
-        
+
         window.location.href = '/templates';
     } catch (error) {
         console.error('Error deleting template:', error);
