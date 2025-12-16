@@ -273,7 +273,7 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
             input_format=ref_fmt,
         )
 
-    ref_frames = _count_yuv420p_frames(ref_yuv, ref_width, ref_height)
+    ref_frames_total = _count_yuv420p_frames(ref_yuv, ref_width, ref_height)
 
     # 2) 对每个 Encoded：转换到 yuv420p（必要时上采样），并计算指标与码率
     encoded_reports: List[Dict[str, Any]] = []
@@ -340,10 +340,8 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
             )
 
         enc_frames = _count_yuv420p_frames(enc_yuv, ref_width, ref_height)
-        if enc_frames != ref_frames:
-            raise ValueError(
-                f"帧数不一致: Ref={ref_frames}, Encoded({enc_label})={enc_frames}"
-            )
+        frames_used = min(ref_frames_total, enc_frames)
+        frame_mismatch = enc_frames != ref_frames_total
 
         # 2.4 计算 PSNR / SSIM / VMAF(vmaf + vmaf_neg)
         psnr_log = analysis_dir / f"encoded_{idx+1}_psnr.log"
@@ -375,11 +373,16 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
             str(enc_yuv),
         ]
 
+        limit_args = ["-frames:v", str(frames_used)] if frame_mismatch else []
+
         await _run_subprocess(
             raw_ref_args
             + [
                 "-filter_complex",
                 f"psnr=stats_file={psnr_log}",
+            ]
+            + limit_args
+            + [
                 "-f",
                 "null",
                 "-",
@@ -390,6 +393,9 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
             + [
                 "-filter_complex",
                 f"ssim=stats_file={ssim_log}",
+            ]
+            + limit_args
+            + [
                 "-f",
                 "null",
                 "-",
@@ -407,6 +413,9 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
             + [
                 "-filter_complex",
                 vmaf_filter,
+            ]
+            + limit_args
+            + [
                 "-f",
                 "null",
                 "-",
@@ -424,9 +433,9 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
 
         if enc_is_yuv:
             frame_size = _frame_size_bytes_yuv420p(enc_width or ref_width, enc_height or ref_height)
-            frame_types = ["RAW"] * ref_frames
-            frame_sizes = [frame_size] * ref_frames
-            frame_timestamps = [i / ref_fps for i in range(ref_frames)]
+            frame_types = ["RAW"] * frames_used
+            frame_sizes = [frame_size] * frames_used
+            frame_timestamps = [i / ref_fps for i in range(frames_used)]
         else:
             frames_info = await ffmpeg_service.probe_video_frames(enc_input, input_format=enc_fmt)
             for i, fr in enumerate(frames_info):
@@ -435,12 +444,14 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
                 ts = fr.get("timestamp")
                 frame_timestamps.append(float(ts) if ts is not None else (i / ref_fps))
 
-            if len(frame_sizes) != ref_frames:
-                raise ValueError(
-                    f"帧数不一致（ffprobe）: Ref={ref_frames}, Encoded({enc_label})={len(frame_sizes)}"
-                )
+            if len(frame_sizes) > frames_used:
+                frame_types = frame_types[:frames_used]
+                frame_sizes = frame_sizes[:frames_used]
+                frame_timestamps = frame_timestamps[:frames_used]
+            elif len(frame_sizes) < frames_used:
+                frames_used = len(frame_sizes)
 
-        duration_seconds = ref_frames / ref_fps
+        duration_seconds = frames_used / ref_fps
         avg_bitrate_bps = int((sum(frame_sizes) * 8) / duration_seconds) if duration_seconds > 0 else 0
 
         encoded_reports.append(
@@ -449,6 +460,9 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
                 "input_format": enc_fmt or "auto",
                 "codec": enc_codec,
                 "scaled_to_reference": scaled,
+                "frames_total": enc_frames,
+                "frames_used": frames_used,
+                "frames_mismatch": frame_mismatch,
                 "metrics": {
                     "psnr": psnr_data,
                     "ssim": ssim_data,
@@ -474,6 +488,11 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
             }
         )
 
+    frames_used_overall = min(
+        (item.get("frames_used", ref_frames_total) for item in encoded_reports),
+        default=ref_frames_total,
+    )
+
     report_data: Dict[str, Any] = {
         "kind": "bitstream_analysis",
         "job_id": job.job_id,
@@ -482,7 +501,9 @@ async def analyze_bitstream_job(job: Job) -> Tuple[Dict[str, Any], Dict[str, Any
             "width": ref_width,
             "height": ref_height,
             "fps": ref_fps,
-            "frames": ref_frames,
+            "frames": ref_frames_total,
+            "frames_total": ref_frames_total,
+            "frames_used": frames_used_overall,
         },
         "encoded": encoded_reports,
     }
