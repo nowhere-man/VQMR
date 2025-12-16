@@ -8,10 +8,10 @@
         <div>
             <h1 class="text-2xl font-bold text-gray-900">码流分析</h1>
             <p class="mt-1 text-sm text-gray-600">
-                载入参考视频 Ref 和一个或多个编码后视频 Encoded，后台异步计算 PSNR / SSIM / VMAF / VMAF-neg / Bitrate，并生成 Streamlit 报告。
+                载入参考视频 Reference 和一个或多个编码后视频 Distorted，后台计算 PSNR / SSIM / VMAF / VMAF-NEG / Bitrate，并生成分析报告。
             </p>
             <p class="mt-1 text-xs text-gray-500">
-                说明：所有打分输入统一转换为 yuv420p；Encoded 若分辨率不一致会先对齐到 Ref；若帧数/时长不一致任务会失败。
+                说明：所有打分输入统一转换为 yuv420p；若分辨率不一致会先将 Distorted 对齐到 Reference；若帧数/时长不一致任务会进行截断。
             </p>
         </div>
         <a href="/" class="text-blue-600 hover:text-blue-800 text-sm font-medium">← 返回首页</a>
@@ -22,33 +22,33 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Reference -->
                 <div class="space-y-3">
-                    <h2 class="text-sm font-semibold text-gray-900">参考视频 Ref</h2>
+                    <h2 class="text-sm font-semibold text-gray-900">参考视频 Reference</h2>
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-medium text-gray-700">服务器端路径（必填其一：路径或上传）</label>
+                        <label class="block text-sm font-medium text-gray-700">视频路径</label>
                         <div class="relative">
                             <input id="refPath" name="reference_path" type="text"
-                                   placeholder="/path/to/ref.mp4 或 /path/to/ref.yuv"
+                                   placeholder="/path/to/ref.mp4 or /path/to/ref.yuv"
                                    class="w-full pr-24 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                             <label class="absolute inset-y-0 right-1 my-1 px-3 flex items-center text-sm font-semibold text-blue-700 bg-blue-50 rounded-md border border-blue-200 cursor-pointer hover:bg-blue-100">
                                 选择
                                 <input id="refInput" name="reference_file" type="file" class="hidden" />
                             </label>
                         </div>
+                        <div class="text-left text-xs text-gray-500 mt-1"> 或</div>
                         <div id="refDrop" class="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-3 text-sm text-gray-600 bg-gray-50 hover:border-blue-400 hover:bg-blue-50 transition-colors">
                             将文件拖拽到此处上传
                         </div>
                         <div id="refFileName" class="text-xs text-gray-600"></div>
-                        <p class="text-xs text-gray-500">拖拽/选择用于上传文件；浏览器无法读取本机绝对路径，服务器路径请手动填写。</p>
                     </div>
                 </div>
 
                 <!-- Encoded -->
                 <div class="space-y-3">
-                    <h2 class="text-sm font-semibold text-gray-900">编码视频 Encoded（一个或多个，容器或 h264/h265 裸流，不接受 .yuv）</h2>
+                    <h2 class="text-sm font-semibold text-gray-900">失真视频 Distorted</h2>
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-medium text-gray-700">服务器端路径（必填其一：路径或上传，多个用换行分隔）</label>
+                        <label class="block text-sm font-medium text-gray-700">文件路径（多个文件换行分隔）</label>
                         <div class="relative">
                             <textarea id="encPaths" name="encoded_paths" rows="4"
                                       placeholder="/path/to/encoded_a.mp4&#10;/path/to/encoded_b.h265"
@@ -58,11 +58,11 @@
                                 <input id="encInput" name="encoded_files" type="file" multiple class="hidden" />
                             </label>
                         </div>
+                        <div class="text-left text-xs text-gray-500 mt-1"> 或</div>
                         <div id="encDrop" class="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-3 text-sm text-gray-600 bg-gray-50 hover:border-blue-400 hover:bg-blue-50 transition-colors">
                             将一个或多个文件拖拽到此处上传
                         </div>
                         <div id="encFileName" class="text-xs text-gray-600"></div>
-                        <p class="text-xs text-gray-500 text-red-600">Encoded 不接受 .yuv；仅支持容器格式或 h264/h265 裸流。</p>
                     </div>
                 </div>
             </div>
@@ -95,12 +95,12 @@
 
             <div class="flex items-center justify-between">
                 <div id="submitError" class="text-sm text-red-600 hidden"></div>
-                <div class="flex items-center gap-3">
-                    <a href="/jobs" class="text-sm text-gray-600 hover:text-gray-800">查看任务列表 →</a>
+                <div class="flex flex-col items-end gap-2">
                     <button id="submitBtn" type="submit"
                             class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300">
                         创建任务
                     </button>
+                    <a href="/jobs" class="text-xs text-gray-600 hover:text-gray-800">查看任务列表 →</a>
                 </div>
             </div>
         </form>

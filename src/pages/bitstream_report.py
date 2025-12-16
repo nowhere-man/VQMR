@@ -58,12 +58,20 @@ def _plot_frame_lines(
     for item in encoded:
         label = item.get("label", "Encoded")
         values = y_series_getter(item)
-        fig.add_trace(go.Scatter(x=list(range(len(values))), y=values, mode="lines", name=label))
+        avg_val = None
+        if values:
+            try:
+                avg_val = sum(values) / len(values)
+            except Exception:
+                avg_val = None
+        legend_name = f"{label}: {avg_val:.4f}" if avg_val is not None else label
+        fig.add_trace(go.Scatter(x=list(range(len(values))), y=values, mode="lines", name=legend_name))
     fig.update_layout(
         title=title,
         xaxis_title="Frame",
         yaxis_title=yaxis_title,
         hovermode="x unified",
+        legend=dict(orientation="h", y=-0.2),
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -198,7 +206,7 @@ if len(df_metrics) >= 2:
 
 st.subheader("逐帧折线图")
 
-tab_psnr, tab_ssim, tab_vmaf, tab_vmaf_neg = st.tabs(["PSNR", "SSIM", "VMAF", "VMAF-neg"])
+tab_psnr, tab_ssim, tab_vmaf, tab_vmaf_neg = st.tabs(["PSNR", "SSIM", "VMAF", "VMAF-NEG"])
 
 with tab_psnr:
     comp = st.selectbox("分量", ["avg", "y", "u", "v"], key="psnr_comp")
@@ -234,8 +242,8 @@ with tab_vmaf_neg:
     _plot_frame_lines(
         encoded_items,
         lambda item: (((item.get("metrics") or {}).get("vmaf") or {}).get("frames") or {}).get("vmaf_neg", []),
-        "VMAF-neg - 每帧",
-        "VMAF-neg",
+        "VMAF-NEG - 每帧",
+        "VMAF-NEG",
     )
 
 
