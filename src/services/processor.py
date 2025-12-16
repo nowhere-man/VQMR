@@ -4,6 +4,7 @@
 处理视频质量指标计算任务
 """
 import asyncio
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ class TaskProcessor:
         """初始化任务处理器"""
         self.processing = False
         self.current_job: Optional[str] = None
+        self.supported_modes = {JobMode.SINGLE_FILE, JobMode.DUAL_FILE, JobMode.BITSTREAM_ANALYSIS}
 
     async def process_job(self, job_id: str) -> None:
         """
@@ -38,6 +40,11 @@ class TaskProcessor:
             logger.error(f"Job {job_id} not found")
             return
 
+        # 仅处理该处理器支持的模式（模板/对比任务由其他后台机制处理）
+        if job.metadata.mode not in self.supported_modes:
+            logger.info(f"Skipping job {job_id} (unsupported mode: {job.metadata.mode})")
+            return
+
         try:
             # 更新状态为处理中
             job.metadata.status = JobStatus.PROCESSING
@@ -51,6 +58,8 @@ class TaskProcessor:
                 await self._process_single_file(job)
             elif job.metadata.mode == JobMode.DUAL_FILE:
                 await self._process_dual_file(job)
+            elif job.metadata.mode == JobMode.BITSTREAM_ANALYSIS:
+                await self._process_bitstream_analysis(job)
 
             # 更新状态为已完成
             job.metadata.status = JobStatus.COMPLETED
@@ -145,6 +154,28 @@ class TaskProcessor:
         # 计算质量指标
         await self._calculate_metrics(job, reference_path, distorted_path)
 
+    async def _process_bitstream_analysis(self, job: Job) -> None:
+        """
+        处理码流分析任务（Ref + 多个 Encoded）
+        """
+        from .storage import job_storage
+        from .bitstream_analysis import analyze_bitstream_job
+
+        report_data, summary = await analyze_bitstream_job(job)
+
+        # 写入报告数据文件（供 Streamlit 使用）
+        report_rel_path = summary.get("report_data_file")
+        if not report_rel_path:
+            raise RuntimeError("Bitstream analysis missing report_data_file")
+
+        report_path = job.job_dir / report_rel_path
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, ensure_ascii=False, indent=2)
+
+        job.metadata.execution_result = summary
+        job_storage.update_job(job)
+
     async def _calculate_metrics(
         self, job: Job, reference_path: Path, distorted_path: Path
     ) -> None:
@@ -236,12 +267,15 @@ class TaskProcessor:
         while self.processing:
             try:
                 # 查找待处理的任务
-                pending_jobs = job_storage.list_jobs(status=JobStatus.PENDING, limit=1)
+                pending_jobs = job_storage.list_jobs(status=JobStatus.PENDING, limit=20)
+                job_to_process = next(
+                    (j for j in pending_jobs if j.metadata.mode in self.supported_modes),
+                    None,
+                )
 
-                if pending_jobs:
-                    job = pending_jobs[0]
-                    self.current_job = job.job_id
-                    await self.process_job(job.job_id)
+                if job_to_process:
+                    self.current_job = job_to_process.job_id
+                    await self.process_job(job_to_process.job_id)
                     self.current_job = None
                 else:
                     # 没有待处理任务，等待一会儿

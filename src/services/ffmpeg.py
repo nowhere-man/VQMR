@@ -7,7 +7,7 @@ import asyncio
 import json
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.config import settings
 
@@ -26,12 +26,15 @@ class FFmpegService:
         self.ffmpeg_path = ffmpeg_path
         self.ffprobe_path = ffprobe_path
 
-    async def get_video_info(self, video_path: Path) -> Dict[str, any]:
+    async def get_video_info(
+        self, video_path: Path, input_format: Optional[str] = None
+    ) -> Dict[str, any]:
         """
         获取视频文件信息
 
         Args:
             video_path: 视频文件路径
+            input_format: 可选输入格式（如 h264/hevc/rawvideo 等）
 
         Returns:
             包含 duration, width, height, fps, bitrate 的字典
@@ -44,8 +47,10 @@ class FFmpegService:
             "json",
             "-show_format",
             "-show_streams",
-            str(video_path),
         ]
+        if input_format:
+            cmd.extend(["-f", input_format])
+        cmd.append(str(video_path))
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -87,10 +92,141 @@ class FFmpegService:
                 "height": int(video_stream.get("height", 0)),
                 "fps": fps,
                 "bitrate": int(format_info.get("bit_rate", 0)),
+                "codec_name": video_stream.get("codec_name"),
+                "nb_frames": (
+                    int(video_stream.get("nb_frames"))
+                    if str(video_stream.get("nb_frames", "")).isdigit()
+                    else None
+                ),
             }
 
         except Exception as e:
             raise RuntimeError(f"Failed to get video info: {str(e)}")
+
+    async def decode_to_yuv420p(
+        self,
+        input_path: Path,
+        output_path: Path,
+        input_format: Optional[str] = None,
+        input_width: Optional[int] = None,
+        input_height: Optional[int] = None,
+        input_fps: Optional[float] = None,
+        input_pix_fmt: str = "yuv420p",
+        scale_width: Optional[int] = None,
+        scale_height: Optional[int] = None,
+    ) -> None:
+        """
+        将输入视频解码为 yuv420p rawvideo。
+
+        - 当 input_width/input_height 提供时，输入按 rawvideo 处理（通常用于 .yuv）。
+        - 当 input_format 提供时，强制指定输入格式（通常用于裸码流 h264/hevc 等）。
+        - 当 scale_width/scale_height 提供时，对输出进行缩放（用于与参考视频对齐分辨率）。
+        """
+        cmd: List[str] = [self.ffmpeg_path, "-y"]
+
+        # 输入
+        if input_width is not None and input_height is not None:
+            cmd.extend(["-f", "rawvideo", "-pix_fmt", input_pix_fmt, "-s", f"{input_width}x{input_height}"])
+            if input_fps is not None:
+                cmd.extend(["-r", str(input_fps)])
+            cmd.extend(["-i", str(input_path)])
+        else:
+            if input_format:
+                cmd.extend(["-f", input_format])
+            cmd.extend(["-i", str(input_path)])
+
+        # 输出滤镜
+        vf_parts: List[str] = []
+        if scale_width is not None and scale_height is not None:
+            vf_parts.append(f"scale={scale_width}:{scale_height}")
+        vf_parts.append("format=yuv420p")
+
+        cmd.extend(["-an", "-sn", "-vf", ",".join(vf_parts)])
+        cmd.extend(["-f", "rawvideo", "-pix_fmt", "yuv420p", str(output_path)])
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await _wait_for_process(process, settings.ffmpeg_timeout)
+            if process.returncode != 0:
+                raise RuntimeError(f"Decode to yuv failed: {stderr.decode()}")
+        except asyncio.TimeoutError:
+            process.kill()
+            raise RuntimeError("Decode to yuv timed out")
+        except Exception as e:
+            raise RuntimeError(f"Failed to decode to yuv: {str(e)}")
+
+    async def probe_video_frames(
+        self, video_path: Path, input_format: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        使用 ffprobe 提取每一帧的基础信息（帧类型、包大小、时间戳）。
+
+        Returns:
+            List[dict]: 每帧包含 index, pict_type, pkt_size, timestamp
+        """
+        cmd: List[str] = [
+            self.ffprobe_path,
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-select_streams",
+            "v:0",
+            "-show_frames",
+            "-show_entries",
+            "frame=pict_type,pkt_size,best_effort_timestamp_time,pkt_pts_time",
+        ]
+        if input_format:
+            cmd.extend(["-f", input_format])
+        cmd.append(str(video_path))
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await _wait_for_process(process, settings.ffmpeg_timeout)
+            if process.returncode != 0:
+                raise RuntimeError(f"ffprobe failed: {stderr.decode()}")
+
+            payload = json.loads(stdout.decode())
+            frames = payload.get("frames", []) or []
+            results: List[Dict[str, Any]] = []
+
+            for idx, frame in enumerate(frames):
+                pkt_size = frame.get("pkt_size")
+                try:
+                    size_val = int(pkt_size) if pkt_size is not None else 0
+                except (TypeError, ValueError):
+                    size_val = 0
+
+                ts_val = frame.get("best_effort_timestamp_time")
+                if ts_val is None:
+                    ts_val = frame.get("pkt_pts_time")
+
+                timestamp: Optional[float]
+                try:
+                    timestamp = float(ts_val) if ts_val is not None else None
+                except (TypeError, ValueError):
+                    timestamp = None
+
+                results.append(
+                    {
+                        "index": idx,
+                        "pict_type": frame.get("pict_type") or None,
+                        "pkt_size": size_val,
+                        "timestamp": timestamp,
+                    }
+                )
+
+            return results
+        except Exception as e:
+            raise RuntimeError(f"Failed to probe frames: {str(e)}")
 
     async def calculate_psnr(
         self,

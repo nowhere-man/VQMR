@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}码流分析 - VQMR{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-start justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">码流分析</h1>
+            <p class="mt-1 text-sm text-gray-600">
+                载入参考视频 Ref 和一个或多个编码后视频 Encoded，后台异步计算 PSNR / SSIM / VMAF / VMAF-neg / Bitrate，并生成 Streamlit 报告。
+            </p>
+            <p class="mt-1 text-xs text-gray-500">
+                说明：所有打分输入统一转换为 yuv420p；Encoded 若分辨率不一致会先对齐到 Ref；若帧数/时长不一致任务会失败。
+            </p>
+        </div>
+        <a href="/" class="text-blue-600 hover:text-blue-800 text-sm font-medium">← 返回首页</a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm p-6">
+        <form id="bitstreamForm" class="space-y-6" enctype="multipart/form-data">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Reference -->
+                <div class="space-y-3">
+                    <h2 class="text-sm font-semibold text-gray-900">参考视频 Ref</h2>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">服务器端路径（可选）</label>
+                        <input name="reference_path" type="text"
+                               placeholder="/path/to/ref.mp4 或 /path/to/ref.yuv"
+                               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <p class="text-xs text-gray-500">路径指运行 uvicorn 的机器上的文件路径。</p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">上传文件（可选）</label>
+                        <input name="reference_file" type="file"
+                               class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100" />
+                        <p class="text-xs text-gray-500">支持拖拽文件到此处（浏览器默认行为）。</p>
+                    </div>
+                </div>
+
+                <!-- Encoded -->
+                <div class="space-y-3">
+                    <h2 class="text-sm font-semibold text-gray-900">编码视频 Encoded（一个或多个）</h2>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">服务器端路径（可选，多个用换行分隔）</label>
+                        <textarea name="encoded_paths" rows="5"
+                                  placeholder="/path/to/encoded_a.mp4&#10;/path/to/encoded_b.h265"
+                                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">上传文件（可选，可多选）</label>
+                        <input name="encoded_files" type="file" multiple
+                               class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100" />
+                        <p class="text-xs text-gray-500">支持拖拽多个文件到此处。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rawvideo params -->
+            <div class="border-t border-gray-200 pt-6">
+                <h2 class="text-sm font-semibold text-gray-900">YUV 输入参数（仅当 Ref 或 Encoded 为 .yuv 时必填）</h2>
+                <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Width</label>
+                        <input name="width" type="number" min="1"
+                               placeholder="例如 1920"
+                               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Height</label>
+                        <input name="height" type="number" min="1"
+                               placeholder="例如 1080"
+                               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">FPS</label>
+                        <input name="fps" type="number" min="0.1" step="0.001"
+                               placeholder="例如 30"
+                               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                </div>
+                <p class="mt-2 text-xs text-gray-500">默认像素格式为 yuv420p。</p>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <div id="submitError" class="text-sm text-red-600 hidden"></div>
+                <div class="flex items-center gap-3">
+                    <a href="/jobs" class="text-sm text-gray-600 hover:text-gray-800">查看任务列表 →</a>
+                    <button id="submitBtn" type="submit"
+                            class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300">
+                        创建任务
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const form = document.getElementById('bitstreamForm');
+const submitBtn = document.getElementById('submitBtn');
+const submitError = document.getElementById('submitError');
+
+function showError(message) {
+  submitError.textContent = message;
+  submitError.classList.remove('hidden');
+}
+
+function clearError() {
+  submitError.textContent = '';
+  submitError.classList.add('hidden');
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  clearError();
+
+  submitBtn.disabled = true;
+  const originalText = submitBtn.textContent;
+  submitBtn.textContent = '创建中...';
+
+  try {
+    const formData = new FormData(form);
+
+    const response = await fetch('/api/jobs/bitstream', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(payload.detail || '创建任务失败');
+    }
+
+    if (!payload.job_id) {
+      throw new Error('服务端未返回 job_id');
+    }
+
+    window.location.href = `/jobs/${payload.job_id}`;
+  } catch (err) {
+    showError(err.message || '创建任务失败');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
+});
+</script>
+{% endblock %}

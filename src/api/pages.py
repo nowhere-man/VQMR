@@ -61,12 +61,14 @@ async def job_report_page(request: Request, job_id: str) -> HTMLResponse:
             "distorted_filename": (
                 metadata.distorted_video.filename if metadata.distorted_video else None
             ),
+            "encoded_filenames": [v.filename for v in (metadata.encoded_videos or [])],
             "preset": metadata.preset,
             "metrics": metadata.metrics,
             "error_message": metadata.error_message,
             "template_a_id": metadata.template_a_id,
             "template_b_id": metadata.template_b_id,
             "comparison_result": metadata.comparison_result,
+            "execution_result": metadata.execution_result,
             "command_logs": [
                 {
                     "command_id": cmd.command_id,
@@ -114,6 +116,7 @@ async def jobs_list_page(
                 if job.metadata.completed_at
                 else "-"
             ),
+            "error_message": job.metadata.error_message,
         }
         for job in jobs
     ]
@@ -214,3 +217,9 @@ async def edit_template_page(request: Request, template_id: str) -> HTMLResponse
     return templates.TemplateResponse(
         "template_form.html", {"request": request, "template_id": template_id}
     )
+
+
+@router.get("/bitstream", response_class=HTMLResponse)
+async def bitstream_analysis_page(request: Request) -> HTMLResponse:
+    """码流分析页面"""
+    return templates.TemplateResponse("bitstream_analysis.html", {"request": request})

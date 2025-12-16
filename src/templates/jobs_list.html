@@ -45,6 +45,9 @@
                         任务状态
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        错误原因
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         操作
                     </th>
                 </tr>
@@ -72,6 +75,13 @@
                             {% elif job.status == 'failed' %}失败
                             {% else %}等待中{% endif %}
                         </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 max-w-md truncate" title="{{ job.error_message or '' }}">
+                        {% if job.status == 'failed' and job.error_message %}
+                            {{ job.error_message }}
+                        {% else %}
+                            -
+                        {% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm">
                         <a href="/jobs/{{ job.job_id }}" class="text-blue-600 hover:text-blue-800 font-medium">

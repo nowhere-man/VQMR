@@ -3,6 +3,9 @@ API 端点实现 - 任务管理
 
 提供任务创建、查询、列表等 RESTful API
 """
+import os
+import shutil
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -183,6 +186,180 @@ async def list_jobs(
         )
         for job in jobs
     ]
+
+
+def _unique_destination(directory: Path, filename: str) -> Path:
+    safe_name = Path(filename).name
+    candidate = directory / safe_name
+    if not candidate.exists():
+        return candidate
+
+    stem = candidate.stem
+    suffix = candidate.suffix
+    for idx in range(1, 1000):
+        attempt = directory / f"{stem}_{idx}{suffix}"
+        if not attempt.exists():
+            return attempt
+
+    raise RuntimeError(f"Failed to allocate unique filename for {safe_name}")
+
+
+def _link_or_copy(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+
+def _parse_paths_field(value: Optional[str]) -> List[Path]:
+    if not value:
+        return []
+    items: List[Path] = []
+    normalized = value.replace(",", "\n")
+    for line in normalized.splitlines():
+        stripped = line.strip()
+        if stripped:
+            items.append(Path(stripped).expanduser())
+    return items
+
+
+@router.post(
+    "/bitstream",
+    response_model=CreateJobResponse,
+    status_code=201,
+    responses={400: {"model": ErrorResponse}},
+)
+async def create_bitstream_job(
+    reference_path: Optional[str] = Form(None),
+    encoded_paths: Optional[str] = Form(None),
+    reference_file: Optional[UploadFile] = File(None),
+    encoded_files: Optional[List[UploadFile]] = File(None),
+    width: Optional[int] = Form(None),
+    height: Optional[int] = Form(None),
+    fps: Optional[float] = Form(None),
+) -> CreateJobResponse:
+    """
+    创建码流分析任务（Ref + 多个 Encoded）
+
+    支持两种方式提供输入：
+    - 服务器端路径（运行 uvicorn 的机器上的路径）
+    - 通过浏览器上传文件
+
+    当输入为 .yuv（rawvideo）时，需要提供 width/height/fps（默认 yuv420p）。
+    """
+    ref_path = Path(reference_path).expanduser() if reference_path else None
+    enc_path_list = _parse_paths_field(encoded_paths)
+
+    if not reference_file and not ref_path:
+        raise HTTPException(status_code=400, detail="必须提供参考视频 reference_file 或 reference_path")
+
+    if not encoded_files and not enc_path_list:
+        raise HTTPException(status_code=400, detail="必须提供至少一个编码视频 encoded_files 或 encoded_paths")
+
+    # 解析并校验服务器端路径输入
+    if ref_path and (not ref_path.exists() or not ref_path.is_file()):
+        raise HTTPException(status_code=400, detail=f"参考视频路径不存在或不是文件: {ref_path}")
+
+    for p in enc_path_list:
+        if not p.exists() or not p.is_file():
+            raise HTTPException(status_code=400, detail=f"编码视频路径不存在或不是文件: {p}")
+
+    def _is_yuv(name: str) -> bool:
+        return Path(name).suffix.lower() == ".yuv"
+
+    has_yuv = False
+    if reference_file and reference_file.filename and _is_yuv(reference_file.filename):
+        has_yuv = True
+    if ref_path and _is_yuv(ref_path.name):
+        has_yuv = True
+    if encoded_files:
+        for f in encoded_files:
+            if f.filename and _is_yuv(f.filename):
+                has_yuv = True
+                break
+    if not has_yuv:
+        for p in enc_path_list:
+            if _is_yuv(p.name):
+                has_yuv = True
+                break
+
+    if has_yuv and (width is None or height is None or fps is None):
+        raise HTTPException(status_code=400, detail="检测到 .yuv 输入，必须填写 width/height/fps")
+
+    async def _read_upload(upload: Optional[UploadFile]) -> Optional[tuple[str, bytes]]:
+        """只接受有文件名且非空内容的上传，返回 (filename, content)。"""
+        if not upload or not upload.filename:
+            return None
+        content = await upload.read()
+        if not content:
+            return None
+        return upload.filename, content
+
+    # 读取有效的上传文件（过滤掉空文件或无文件名的部分）
+    ref_upload = await _read_upload(reference_file)
+    encoded_uploads: List[tuple[str, bytes]] = []
+    if encoded_files:
+        for upload in encoded_files:
+            data = await _read_upload(upload)
+            if data:
+                encoded_uploads.append(data)
+
+    if not ref_upload and not ref_path:
+        raise HTTPException(status_code=400, detail="必须提供参考视频 reference_file 或 reference_path")
+
+    if not encoded_uploads and not enc_path_list:
+        raise HTTPException(status_code=400, detail="必须提供至少一个编码视频 encoded_files 或 encoded_paths")
+
+    # 创建任务记录
+    job_id = job_storage.generate_job_id()
+    metadata = JobMetadata(
+        job_id=job_id,
+        mode=JobMode.BITSTREAM_ANALYSIS,
+        status=JobStatus.PENDING,
+        template_name="码流分析",
+        rawvideo_width=width,
+        rawvideo_height=height,
+        rawvideo_fps=fps,
+    )
+    job = job_storage.create_job(metadata)
+
+    # 保存/复制参考视频
+    if ref_upload:
+        ref_filename, ref_content = ref_upload
+        ref_dest = _unique_destination(job.job_dir, ref_filename or "reference")
+        save_uploaded_file(ref_content, ref_dest)
+    else:
+        ref_dest = _unique_destination(job.job_dir, ref_path.name)
+        _link_or_copy(ref_path, ref_dest)
+
+    metadata.reference_video = extract_video_info(ref_dest)
+
+    # 保存/复制编码视频（支持多输入）
+    encoded_infos = []
+
+    if encoded_uploads:
+        for filename, content in encoded_uploads:
+            dest = _unique_destination(job.job_dir, filename or "encoded")
+            save_uploaded_file(content, dest)
+            encoded_infos.append(extract_video_info(dest))
+
+    for p in enc_path_list:
+        dest = _unique_destination(job.job_dir, p.name)
+        _link_or_copy(p, dest)
+        encoded_infos.append(extract_video_info(dest))
+
+    metadata.encoded_videos = encoded_infos
+
+    # 更新元数据
+    job_storage.update_job(job)
+
+    return CreateJobResponse(
+        job_id=metadata.job_id,
+        status=metadata.status,
+        mode=metadata.mode,
+        created_at=metadata.created_at,
+    )
 
 
 @router.post("/compare", response_model=dict)

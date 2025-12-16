@@ -25,6 +25,7 @@ class JobMode(str, Enum):
 
     SINGLE_FILE = "single_file"  # 单文件模式：系统执行预设转码
     DUAL_FILE = "dual_file"  # 双文件模式：用户提供参考和待测视频
+    BITSTREAM_ANALYSIS = "bitstream_analysis"  # 码流分析：参考 + 多个编码文件
     COMPARISON = "comparison"  # 对比模式：对比两个模板的执行结果
     TEMPLATE = "template"  # 模板模式：使用模板执行转码
 
@@ -99,6 +100,13 @@ class JobMetadata(BaseModel):
     # 原始视频信息
     reference_video: Optional[VideoInfo] = Field(None, description="参考视频信息")
     distorted_video: Optional[VideoInfo] = Field(None, description="待测视频信息")
+    encoded_videos: List[VideoInfo] = Field(default_factory=list, description="编码视频信息列表（码流分析）")
+
+    # RawVideo (YUV) 参数（码流分析）
+    rawvideo_width: Optional[int] = Field(None, description="YUV 宽度（仅 rawvideo）")
+    rawvideo_height: Optional[int] = Field(None, description="YUV 高度（仅 rawvideo）")
+    rawvideo_fps: Optional[float] = Field(None, description="YUV 帧率（仅 rawvideo）")
+    rawvideo_pix_fmt: str = Field(default="yuv420p", description="YUV 像素格式（默认 yuv420p）")
 
     # 转码参数（单文件模式）
     preset: Optional[str] = Field(None, description="转码预设")

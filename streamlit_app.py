@@ -22,6 +22,16 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# 支持从 FastAPI 任务详情页直接跳转到码流分析报告：
+# http://localhost:8079?job_id=<job_id>
+job_id = st.query_params.get("job_id")
+if job_id:
+    if isinstance(job_id, list):
+        job_id = job_id[0] if job_id else None
+    if job_id:
+        st.session_state["bitstream_job_id"] = str(job_id)
+    st.switch_page("pages/bitstream_report.py")
+
 # 自定义CSS样式
 st.markdown(
     """
@@ -121,7 +131,7 @@ else:
             with col2:
                 if st.button("查看详情", key=f"detail_{idx}"):
                     st.session_state['selected_report_id'] = report['report_id']
-                    st.switch_page("src/pages/report_details.py")
+                    st.switch_page("pages/report_details.py")
 
             # 模板信息
             with st.expander("📝 模板参数", expanded=False):
@@ -186,4 +196,4 @@ with st.expander("🔗 快速导航", expanded=False):
             st.info("请先从上方报告列表选择一个报告")
     with col2:
         if st.button("📉 指标对比分析"):
-            st.switch_page("src/pages/metrics_comparison.py")
+            st.switch_page("pages/metrics_comparison.py")

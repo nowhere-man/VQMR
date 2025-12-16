@@ -24,7 +24,7 @@ class JobStorage:
         Args:
             root_dir: 任务根目录，默认使用配置中的 jobs_root_dir
         """
-        self.root_dir = root_dir or settings.jobs_root_dir
+        self.root_dir = (root_dir or settings.jobs_root_dir).resolve()
         self.root_dir.mkdir(parents=True, exist_ok=True)
 
     def create_job(self, metadata: JobMetadata) -> Job:
