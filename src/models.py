@@ -158,13 +158,15 @@ class Job(BaseModel):
     def get_reference_path(self) -> Optional[Path]:
         """获取参考视频文件路径"""
         if self.metadata.reference_video:
-            return self.job_dir / self.metadata.reference_video.filename
+            ref = Path(self.metadata.reference_video.filename)
+            return ref if ref.is_absolute() else (self.job_dir / ref)
         return None
 
     def get_distorted_path(self) -> Optional[Path]:
         """获取待测视频文件路径"""
         if self.metadata.distorted_video:
-            return self.job_dir / self.metadata.distorted_video.filename
+            dist = Path(self.metadata.distorted_video.filename)
+            return dist if dist.is_absolute() else (self.job_dir / dist)
         return None
 
     def get_metadata_path(self) -> Path:

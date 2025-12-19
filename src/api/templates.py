@@ -443,13 +443,6 @@ async def execute_template(
     if not template:
         raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
 
-    # 解析源文件路径
-    from pathlib import Path
-
-    source_files = None
-    if request.source_files:
-        source_files = [Path(f) for f in request.source_files]
-
     # 创建任务记录
     job_id = job_storage.generate_job_id()
     metadata = JobMetadata(
@@ -496,7 +489,7 @@ async def execute_template(
             job_storage.update_job(job)
 
             result = await template_encoder_service.encode_with_template(
-                template, source_files,
+                template, None,
                 add_command_callback=add_command_log,
                 update_status_callback=update_command_status,
                 job=job,

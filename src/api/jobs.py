@@ -324,16 +324,15 @@ async def create_bitstream_job(
     )
     job = job_storage.create_job(metadata)
 
-    # 保存/复制参考视频
+    # 保存/引用参考视频
     if ref_upload:
         ref_filename, ref_content = ref_upload
         ref_dest = _unique_destination(job.job_dir, ref_filename or "reference")
         save_uploaded_file(ref_content, ref_dest)
+        metadata.reference_video = extract_video_info(ref_dest)
     else:
-        ref_dest = _unique_destination(job.job_dir, ref_path.name)
-        _link_or_copy(ref_path, ref_dest)
-
-    metadata.reference_video = extract_video_info(ref_dest)
+        # 直接使用原路径，不复制
+        metadata.reference_video = extract_video_info(ref_path)
 
     # 保存/复制编码视频（支持多输入）
     encoded_infos = []
@@ -345,9 +344,8 @@ async def create_bitstream_job(
             encoded_infos.append(extract_video_info(dest))
 
     for p in enc_path_list:
-        dest = _unique_destination(job.job_dir, p.name)
-        _link_or_copy(p, dest)
-        encoded_infos.append(extract_video_info(dest))
+        # 直接引用原路径
+        encoded_infos.append(extract_video_info(p))
 
     metadata.encoded_videos = encoded_infos
 
