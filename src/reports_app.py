@@ -13,7 +13,6 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from src.services.report_scanner import report_scanner
 from src.config import settings
 
 
@@ -122,6 +121,4 @@ else:
                 _set_job_query_param(job_id)
                 st.switch_page("pages/bitstream_report.py")
 
-# 侧边栏
-
-# 其余 legacy 报告列表/筛选保留，但不强依赖（如需可再打开）
+# 侧边栏（不再保留 legacy 报告扫描）
