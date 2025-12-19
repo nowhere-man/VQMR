@@ -31,6 +31,31 @@ def _jobs_root_dir() -> Path:
     return (project_root / root).resolve()
 
 
+def _list_bitstream_jobs(limit: int = 50) -> List[Dict[str, Any]]:
+    """列出包含码流分析报告的任务（按报告文件修改时间倒序）。"""
+    root = _jobs_root_dir()
+    if not root.exists():
+        return []
+
+    items: List[Dict[str, Any]] = []
+    for job_dir in root.iterdir():
+        if not job_dir.is_dir():
+            continue
+        report_path = job_dir / "bitstream_analysis" / "report_data.json"
+        if report_path.exists():
+            mtime = report_path.stat().st_mtime
+            items.append(
+                {
+                    "job_id": job_dir.name,
+                    "mtime": mtime,
+                    "report_path": report_path,
+                }
+            )
+
+    items.sort(key=lambda x: x["mtime"], reverse=True)
+    return items[:limit]
+
+
 def _get_job_id() -> Optional[str]:
     job_id = st.query_params.get("job_id")
     if job_id:
@@ -81,7 +106,22 @@ st.title("📊 码流分析报告")
 
 job_id = _get_job_id()
 if not job_id:
-    st.warning("缺少 job_id，请从任务详情页点击“打开 Streamlit 报告”。")
+    st.info("请选择一个码流分析任务，或从任务列表/详情页带参数跳转。")
+    jobs = _list_bitstream_jobs()
+    if not jobs:
+        st.warning("暂未找到码流分析报告。请先创建任务。")
+        st.stop()
+
+    options = {f"{item['job_id']} (最近修改)": item["job_id"] for item in jobs}
+    selected = st.selectbox("选择报告", options=list(options.keys()))
+    if selected:
+        chosen_job = options[selected]
+        st.session_state["bitstream_job_id"] = chosen_job
+        try:
+            st.query_params["job_id"] = chosen_job
+        except Exception:
+            pass
+        st.rerun()
     st.stop()
 
 # 保持 session_state，方便从首页跳转
