@@ -21,7 +21,7 @@ mkdir -p jobs
 
 export PYTHONPATH=.
 
-.venv/bin/streamlit run src/reports_app.py \
+.venv/bin/streamlit run src/Homepage.py \
     --server.port 8079 \
     --server.address 0.0.0.0 \
     --server.headless true \

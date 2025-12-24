@@ -18,7 +18,7 @@ from src.config import settings
 
 # 页面配置
 st.set_page_config(
-    page_title="VMA 质量分析报告",
+    page_title="首页",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -102,7 +102,7 @@ if template_job_id:
             st.query_params["template_job_id"] = str(template_job_id)
         except Exception:
             pass
-        st.switch_page("pages/template_metrics.py")
+        st.switch_page("pages/Metrics_Analysis.py")
 
 if job_id:
     if isinstance(job_id, list):
@@ -110,7 +110,7 @@ if job_id:
     if job_id:
         st.session_state["bitstream_job_id"] = str(job_id)
         _set_job_query_param(str(job_id))
-        st.switch_page("pages/bitstream_report.py")
+        st.switch_page("pages/Stream_Analysis.py")
 
 # 自定义CSS样式
 st.markdown(
@@ -142,44 +142,30 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 主标题
-st.markdown('<h1 class="main-header">📊 视频质量分析报告</h1>', unsafe_allow_html=True)
+# 主标题居中
+st.markdown("<h1 class='main-header' style='text-align:center;'>📊 视频 Metrics 分析报告</h1>", unsafe_allow_html=True)
 
 # 最近的码流分析报告列表
 st.subheader("最近的码流分析报告")
-recent_jobs = _list_bitstream_jobs()
+recent_jobs = _list_bitstream_jobs(limit=5)
 if not recent_jobs:
-    st.info("暂无码流分析报告。请先在任务列表创建任务或上传视频进行码流分析。")
+    st.info("暂未找到报告，请先创建任务。")
 else:
     for item in recent_jobs:
         job_id = item["job_id"]
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.write(f"- Job: `{job_id}`  (report at: `bitstream_analysis/report_data.json`)")
-        with col2:
-            if st.button("打开报告", key=f"open_{job_id}"):
-                st.session_state["bitstream_job_id"] = job_id
-                _set_job_query_param(job_id)
-                st.switch_page("pages/bitstream_report.py")
+        st.markdown(f"- <a href='/?job_id={job_id}' target='_self'>{job_id} · bitstream_analysis/report_data.json</a>", unsafe_allow_html=True)
 
 # 模板指标报告列表
-st.subheader("最近的模板指标报告")
-tpl_jobs = _list_template_jobs()
+st.subheader("最近的Metrics对比报告")
+tpl_jobs = _list_template_jobs(limit=5)
 if not tpl_jobs:
-    st.info("暂无模板指标报告。请在 Metrics对比 中创建任务。")
+    st.info("暂未找到报告，请先创建任务。")
 else:
     for item in tpl_jobs:
         job_id = item["job_id"]
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.write(f"- Job: `{job_id}`  (report at: `metrics_analysis/report_data.json`)")
-        with col2:
-            if st.button("打开报告", key=f"open_tpl_{job_id}"):
-                st.session_state["template_job_id"] = job_id
-                try:
-                    st.query_params["template_job_id"] = job_id
-                except Exception:
-                    pass
-                st.switch_page("pages/template_metrics.py")
+        st.markdown(
+            f"- <a href='/?template_job_id={job_id}' target='_self'>{job_id} · metrics_analysis/report_data.json</a>",
+            unsafe_allow_html=True,
+        )
 
 # 侧边栏（不再保留 legacy 报告扫描）

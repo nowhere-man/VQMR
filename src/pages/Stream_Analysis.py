@@ -62,7 +62,7 @@ def _get_job_id() -> Optional[str]:
         if isinstance(job_id, list):
             job_id = job_id[0] if job_id else None
         return str(job_id) if job_id else None
-    return st.session_state.get("bitstream_job_id")
+    return None
 
 
 def _load_report(job_id: str) -> Dict[str, Any]:
@@ -100,27 +100,20 @@ def _plot_frame_lines(
     st.plotly_chart(fig, use_container_width=True)
 
 
-st.set_page_config(page_title="码流分析报告 - VMA", page_icon="📊", layout="wide")
-st.title("📊 码流分析报告")
+st.set_page_config(page_title="码流分析", page_icon="📊", layout="wide")
+
+st.markdown("<h1 style='text-align:center;'>📊 码流分析报告</h1>", unsafe_allow_html=True)
 
 job_id = _get_job_id()
 if not job_id:
-    st.info("请选择一个码流分析任务，或从任务列表/详情页带参数跳转。")
     jobs = _list_bitstream_jobs()
     if not jobs:
-        st.warning("暂未找到码流分析报告。请先创建任务。")
+        st.warning("暂未找到报告。请先创建任务。")
         st.stop()
 
-    options = {f"{item['job_id']} (最近修改)": item["job_id"] for item in jobs}
-    selected = st.selectbox("选择报告", options=list(options.keys()))
-    if selected:
-        chosen_job = options[selected]
-        st.session_state["bitstream_job_id"] = chosen_job
-        try:
-            st.query_params["job_id"] = chosen_job
-        except Exception:
-            pass
-        st.rerun()
+    for item in jobs:
+        jid = item["job_id"]
+        st.markdown(f"- <a href='?job_id={jid}' target='_self'>{jid} · bitstream_analysis/report_data.json</a>", unsafe_allow_html=True)
     st.stop()
 
 # 保持 session_state，方便从首页跳转

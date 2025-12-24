@@ -81,15 +81,14 @@ def _parse_point(label: str) -> Tuple[Optional[str], Optional[float]]:
     return rc, val
 
 
-st.set_page_config(page_title="模板 Metrics 报告 - VMA", page_icon="📊", layout="wide")
-st.title("📊 模板 Metrics 报告")
+st.set_page_config(page_title="Metrics对比", page_icon="📊", layout="wide")
+st.markdown("<h1 style='text-align:center;'>📊 Metrics对比报告</h1>", unsafe_allow_html=True)
 
 job_id = _get_job_id()
 if not job_id:
-    st.info("请选择一个模板任务，或从任务列表/详情页带参数跳转。")
     jobs = _list_template_jobs()
     if not jobs:
-        st.warning("暂未找到模板指标报告。请先创建模板任务。")
+        st.warning("暂未找到报告，请先创建任务。")
         st.stop()
     options = {f"{item['job_id']} (最近修改)": item["job_id"] for item in jobs}
     selected = st.selectbox("选择报告", options=list(options.keys()))

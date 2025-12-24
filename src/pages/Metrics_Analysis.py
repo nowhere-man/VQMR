@@ -218,17 +218,17 @@ def _build_bd_rows(df: pd.DataFrame) -> Tuple[List[Dict[str, Any]], List[Dict[st
     return bd_rate_rows, bd_metric_rows
 
 
-st.set_page_config(page_title="Metrics 分析对比 - VMA", page_icon="📊", layout="wide")
-st.title("📊 Metrics 分析对比（选择两个 Metrics 分析任务，实时生成报告）")
+st.set_page_config(page_title="Metrics分析", page_icon="📊", layout="wide")
+st.markdown("<h1 style='text-align:center;'>📊 Metrics分析</h1>", unsafe_allow_html=True)
 
 jobs = _list_metrics_jobs()
 if len(jobs) < 2:
-    st.info("需要至少两个已完成的 Metrics 分析任务（包含 analyse_data.json）。")
+    st.info("需要至少两个已完成的Metrics分析任务")
     st.stop()
 
 options = [j["job_id"] for j in jobs if j["status_ok"]]
 if len(options) < 2:
-    st.info("可用的已完成任务不足两个。")
+    st.info("任务数量不足，无法进行分析。")
     st.stop()
 
 col1, col2 = st.columns(2)
