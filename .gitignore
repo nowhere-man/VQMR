@@ -51,6 +51,7 @@ jobs/
 
 # 持久化模板存储目录
 templates/
+reports/
 
 # Logs
 *.log
