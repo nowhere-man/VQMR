@@ -70,7 +70,9 @@ def _load_report(job_id: str) -> Dict[str, Any]:
 def _parse_point(label: str) -> Tuple[Optional[str], Optional[float]]:
     if not label:
         return None, None
-    parts = label.rsplit("_", 2)
+    # 去掉文件扩展名
+    label_no_ext = label.rsplit(".", 1)[0] if "." in label else label
+    parts = label_no_ext.rsplit("_", 2)
     if len(parts) < 3:
         return None, None
     rc = parts[-2]
@@ -167,9 +169,55 @@ if df_metrics.empty:
     st.warning("报告中没有可用的指标数据。")
     st.stop()
 
-st.dataframe(df_metrics.sort_values(by=["Video", "RC", "Point", "Side"]), use_container_width=True, hide_index=True)
+# RD Curve
+st.subheader("RD Curve")
+video_list = df_metrics["Video"].unique().tolist()
+metric_options = ["PSNR", "SSIM", "VMAF", "VMAF-NEG"]
 
-# 对比表（Baseline vs Experimental）
+col_select, col_chart = st.columns([1, 3])
+with col_select:
+    st.write("")  # 添加空行使选择器垂直居中
+    st.write("")
+    selected_video = st.selectbox("选择视频", video_list, key="rd_video")
+    selected_metric = st.selectbox("选择指标", metric_options, key="rd_metric")
+
+# 筛选数据并绘制 RD 曲线
+video_df = df_metrics[df_metrics["Video"] == selected_video]
+baseline_data = video_df[video_df["Side"] == "Baseline"].sort_values("Bitrate_kbps")
+exp_data = video_df[video_df["Side"] == "Experimental"].sort_values("Bitrate_kbps")
+
+fig_rd = go.Figure()
+fig_rd.add_trace(
+    go.Scatter(
+        x=baseline_data["Bitrate_kbps"],
+        y=baseline_data[selected_metric],
+        mode="lines+markers",
+        name="Baseline",
+        marker=dict(size=10),
+        line=dict(width=2, shape="spline", smoothing=1.3),
+    )
+)
+fig_rd.add_trace(
+    go.Scatter(
+        x=exp_data["Bitrate_kbps"],
+        y=exp_data[selected_metric],
+        mode="lines+markers",
+        name="Experimental",
+        marker=dict(size=10),
+        line=dict(width=2, shape="spline", smoothing=1.3),
+    )
+)
+fig_rd.update_layout(
+    title=f"RD Curve - {selected_video}",
+    xaxis_title="Bitrate (kbps)",
+    yaxis_title=selected_metric,
+    hovermode="x unified",
+    legend=dict(orientation="h", y=-0.15),
+)
+with col_chart:
+    st.plotly_chart(fig_rd, use_container_width=True)
+
+# Diff 对比表（Baseline vs Experimental）
 base_df = df_metrics[df_metrics["Side"] == "Baseline"]
 exp_df = df_metrics[df_metrics["Side"] == "Experimental"]
 merged = base_df.merge(
@@ -183,33 +231,46 @@ if not merged.empty:
     merged["SSIM Δ"] = merged["SSIM_exp"] - merged["SSIM_base"]
     merged["VMAF Δ"] = merged["VMAF_exp"] - merged["VMAF_base"]
     merged["VMAF-NEG Δ"] = merged["VMAF-NEG_exp"] - merged["VMAF-NEG_base"]
-    st.subheader("Baseline vs Experimental 对比")
+
+    diff_df = merged[
+        ["Video", "RC", "Point", "Bitrate Δ%", "PSNR Δ", "SSIM Δ", "VMAF Δ", "VMAF-NEG Δ"]
+    ].sort_values(by=["Video", "Point"]).reset_index(drop=True)
+
+    # 合并同一视频的名称（只在第一行显示）
+    prev_video = None
+    for idx in diff_df.index:
+        if diff_df.at[idx, "Video"] == prev_video:
+            diff_df.at[idx, "Video"] = ""
+        else:
+            prev_video = diff_df.at[idx, "Video"]
+
+    # 定义颜色样式函数
+    def _color_diff(val):
+        if pd.isna(val) or not isinstance(val, (int, float)):
+            return ""
+        if val > 0:
+            return "color: green"
+        elif val < 0:
+            return "color: red"
+        return ""
+
+    diff_cols = ["Bitrate Δ%", "PSNR Δ", "SSIM Δ", "VMAF Δ", "VMAF-NEG Δ"]
+    styled_df = diff_df.style.applymap(_color_diff, subset=diff_cols)
+
+    st.subheader("Delta")
     st.dataframe(
-        merged[
-            [
-                "Video",
-                "RC",
-                "Point",
-                "Bitrate_kbps_base",
-                "Bitrate_kbps_exp",
-                "Bitrate Δ%",
-                "PSNR_base",
-                "PSNR_exp",
-                "PSNR Δ",
-                "SSIM_base",
-                "SSIM_exp",
-                "SSIM Δ",
-                "VMAF_base",
-                "VMAF_exp",
-                "VMAF Δ",
-                "VMAF-NEG_base",
-                "VMAF-NEG_exp",
-                "VMAF-NEG Δ",
-            ]
-        ].sort_values(by=["Video", "Point"]),
+        styled_df,
         use_container_width=True,
         hide_index=True,
+        column_config={
+            "Video": st.column_config.TextColumn("Video", width="medium"),
+        },
     )
+
+# 详细表格（默认折叠）
+st.subheader("Details")
+with st.expander("查看详细Metrics数据", expanded=False):
+    st.dataframe(df_metrics.sort_values(by=["Video", "RC", "Point", "Side"]), use_container_width=True, hide_index=True)
 
 
 # ========== BD-Rate ==========
