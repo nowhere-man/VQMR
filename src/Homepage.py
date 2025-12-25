@@ -143,7 +143,7 @@ st.markdown(
 )
 
 # 主标题居中
-st.markdown("<h1 class='main-header' style='text-align:center;'>📊 视频 Metrics 分析报告</h1>", unsafe_allow_html=True)
+st.markdown("<h1 class='main-header' style='text-align:center;'>📊 视频Metrics分析报告</h1>", unsafe_allow_html=True)
 
 # 最近的码流分析报告列表
 st.subheader("最近的码流分析报告")
