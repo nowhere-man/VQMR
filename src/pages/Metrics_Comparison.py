@@ -277,44 +277,66 @@ with st.expander("查看详细Metrics数据", expanded=False):
 st.header("BD-Rate")
 if bd_list:
     df_bd = pd.DataFrame(bd_list)
-    st.dataframe(
-        df_bd[
-            [
-                "source",
-                "bd_rate_psnr",
-                "bd_rate_ssim",
-                "bd_rate_vmaf",
-                "bd_rate_vmaf_neg",
-            ]
-        ].rename(
-            columns={
-                "source": "Video",
-                "bd_rate_psnr": "BD-Rate PSNR (%)",
-                "bd_rate_ssim": "BD-Rate SSIM (%)",
-                "bd_rate_vmaf": "BD-Rate VMAF (%)",
-                "bd_rate_vmaf_neg": "BD-Rate VMAF-NEG (%)",
-            }
-        ),
-        use_container_width=True,
-        hide_index=True,
+
+    # BD-Rate 颜色样式：小于0绿色，大于0红色
+    def _color_bd_rate(val):
+        if pd.isna(val) or not isinstance(val, (int, float)):
+            return ""
+        if val < 0:
+            return "color: green"
+        elif val > 0:
+            return "color: red"
+        return ""
+
+    bd_rate_cols = ["bd_rate_psnr", "bd_rate_ssim", "bd_rate_vmaf", "bd_rate_vmaf_neg"]
+    bd_rate_display = df_bd[["source"] + bd_rate_cols].rename(
+        columns={
+            "source": "Video",
+            "bd_rate_psnr": "BD-Rate PSNR (%)",
+            "bd_rate_ssim": "BD-Rate SSIM (%)",
+            "bd_rate_vmaf": "BD-Rate VMAF (%)",
+            "bd_rate_vmaf_neg": "BD-Rate VMAF-NEG (%)",
+        }
     )
-    fig = go.Figure()
-    for key, name in [
-        ("bd_rate_psnr", "BD-Rate PSNR"),
-        ("bd_rate_ssim", "BD-Rate SSIM"),
-        ("bd_rate_vmaf", "BD-Rate VMAF"),
-        ("bd_rate_vmaf_neg", "BD-Rate VMAF-NEG"),
-    ]:
+    styled_bd_rate = bd_rate_display.style.applymap(
+        _color_bd_rate,
+        subset=["BD-Rate PSNR (%)", "BD-Rate SSIM (%)", "BD-Rate VMAF (%)", "BD-Rate VMAF-NEG (%)"],
+    )
+    st.dataframe(styled_bd_rate, use_container_width=True, hide_index=True)
+
+    # BD-Rate 柱状图（Tab 页形式）
+    tab_psnr, tab_ssim, tab_vmaf, tab_vmaf_neg = st.tabs(
+        ["BD-Rate PSNR", "BD-Rate SSIM", "BD-Rate VMAF", "BD-Rate VMAF-NEG"]
+    )
+
+    def _create_bd_bar_chart(df, col, title):
+        colors = ["green" if v < 0 else "red" if v > 0 else "gray" for v in df[col].fillna(0)]
+        fig = go.Figure()
         fig.add_trace(
-            go.Scatter(
-                x=df_bd["source"],
-                y=df_bd[key],
-                mode="lines+markers",
-                name=name,
+            go.Bar(
+                x=df["source"],
+                y=df[col],
+                marker_color=colors,
+                text=[f"{v:.2f}%" if pd.notna(v) else "" for v in df[col]],
+                textposition="outside",
             )
         )
-    fig.update_layout(yaxis_title="Δ Bitrate (%)", xaxis_title="Video")
-    st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(
+            title=title,
+            xaxis_title="Video",
+            yaxis_title="BD-Rate (%)",
+            showlegend=False,
+        )
+        return fig
+
+    with tab_psnr:
+        st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_psnr", "BD-Rate PSNR"), use_container_width=True)
+    with tab_ssim:
+        st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_ssim", "BD-Rate SSIM"), use_container_width=True)
+    with tab_vmaf:
+        st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_vmaf", "BD-Rate VMAF"), use_container_width=True)
+    with tab_vmaf_neg:
+        st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_vmaf_neg", "BD-Rate VMAF-NEG"), use_container_width=True)
 else:
     st.info("暂无 BD-Rate 数据。")
 
@@ -323,44 +345,66 @@ else:
 st.header("BD-Metrics")
 if bd_list:
     df_bdm = pd.DataFrame(bd_list)
-    st.dataframe(
-        df_bdm[
-            [
-                "source",
-                "bd_psnr",
-                "bd_ssim",
-                "bd_vmaf",
-                "bd_vmaf_neg",
-            ]
-        ].rename(
-            columns={
-                "source": "Video",
-                "bd_psnr": "BD PSNR",
-                "bd_ssim": "BD SSIM",
-                "bd_vmaf": "BD VMAF",
-                "bd_vmaf_neg": "BD VMAF-NEG",
-            }
-        ),
-        use_container_width=True,
-        hide_index=True,
+
+    # BD-Metrics 颜色样式：大于0绿色，小于0红色
+    def _color_bd_metrics(val):
+        if pd.isna(val) or not isinstance(val, (int, float)):
+            return ""
+        if val > 0:
+            return "color: green"
+        elif val < 0:
+            return "color: red"
+        return ""
+
+    bd_metrics_cols = ["bd_psnr", "bd_ssim", "bd_vmaf", "bd_vmaf_neg"]
+    bd_metrics_display = df_bdm[["source"] + bd_metrics_cols].rename(
+        columns={
+            "source": "Video",
+            "bd_psnr": "BD PSNR",
+            "bd_ssim": "BD SSIM",
+            "bd_vmaf": "BD VMAF",
+            "bd_vmaf_neg": "BD VMAF-NEG",
+        }
     )
-    fig2 = go.Figure()
-    for key, name in [
-        ("bd_psnr", "BD PSNR"),
-        ("bd_ssim", "BD SSIM"),
-        ("bd_vmaf", "BD VMAF"),
-        ("bd_vmaf_neg", "BD VMAF-NEG"),
-    ]:
-        fig2.add_trace(
-            go.Scatter(
-                x=df_bdm["source"],
-                y=df_bdm[key],
-                mode="lines+markers",
-                name=name,
+    styled_bd_metrics = bd_metrics_display.style.applymap(
+        _color_bd_metrics,
+        subset=["BD PSNR", "BD SSIM", "BD VMAF", "BD VMAF-NEG"],
+    )
+    st.dataframe(styled_bd_metrics, use_container_width=True, hide_index=True)
+
+    # BD-Metrics 柱状图（Tab 页形式）
+    tab_bd_psnr, tab_bd_ssim, tab_bd_vmaf, tab_bd_vmaf_neg = st.tabs(
+        ["BD PSNR", "BD SSIM", "BD VMAF", "BD VMAF-NEG"]
+    )
+
+    def _create_bd_metrics_bar_chart(df, col, title):
+        colors = ["green" if v > 0 else "red" if v < 0 else "gray" for v in df[col].fillna(0)]
+        fig = go.Figure()
+        fig.add_trace(
+            go.Bar(
+                x=df["source"],
+                y=df[col],
+                marker_color=colors,
+                text=[f"{v:.4f}" if pd.notna(v) else "" for v in df[col]],
+                textposition="outside",
             )
         )
-    fig2.update_layout(yaxis_title="Δ Metric", xaxis_title="Video")
-    st.plotly_chart(fig2, use_container_width=True)
+        fig.update_layout(
+            title=title,
+            xaxis_title="Video",
+            yaxis_title="Δ Metric",
+            showlegend=False,
+        )
+        return fig
+
+    with tab_bd_psnr:
+        st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_psnr", "BD PSNR"), use_container_width=True)
+    with tab_bd_ssim:
+        st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_ssim", "BD SSIM"), use_container_width=True)
+    with tab_bd_vmaf:
+        st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_vmaf", "BD VMAF"), use_container_width=True)
+    with tab_bd_vmaf_neg:
+        st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_vmaf_neg", "BD VMAF-NEG"), use_container_width=True)
 else:
     st.info("暂无 BD-Metrics 数据。")
 
