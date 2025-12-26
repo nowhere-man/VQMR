@@ -250,7 +250,7 @@ def create_cpu_chart(
         xaxis_title="Time (s)",
         yaxis_title="CPU (%)",
         hovermode="x unified",
-        legend=dict(orientation="h", y=-0.15),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
     )
 
     return fig

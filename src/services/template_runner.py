@@ -271,11 +271,63 @@ def _env_info() -> Dict[str, Any]:
         info["cpu_log_cores"] = psutil.cpu_count(logical=True) or 0
         info["cpu_percent_before"] = round(psutil.cpu_percent(interval=0.1), 1)
 
-        # 内存信息（转换为 MB）
+        # CPU 主频（MHz）
+        try:
+            cpu_freq = psutil.cpu_freq()
+            if cpu_freq:
+                info["cpu_freq_mhz"] = round(cpu_freq.current, 2)
+        except Exception:
+            pass
+
+        # NUMA nodes
+        try:
+            import subprocess
+            if platform.system() == "Linux":
+                result = subprocess.run(
+                    ["lscpu"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.split("\n"):
+                        if line.startswith("NUMA node(s):"):
+                            info["numa_nodes"] = int(line.split(":")[1].strip())
+                            break
+        except Exception:
+            pass
+
+        # 内存信息（转换为 GB）
         vm = psutil.virtual_memory()
-        info["mem_total_mb"] = round(vm.total / (1024 * 1024), 2)
-        info["mem_available_mb"] = round(vm.available / (1024 * 1024), 2)
-        info["mem_percent_used"] = vm.percent
+        info["mem_total_gb"] = round(vm.total / (1024 ** 3), 2)
+        info["mem_used_gb"] = round(vm.used / (1024 ** 3), 2)
+        info["mem_available_gb"] = round(vm.available / (1024 ** 3), 2)
+        info["mem_percent_used"] = round(vm.percent, 1)
+
+        # Linux 发行版信息
+        if platform.system() == "Linux":
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["lsb_release", "-d"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                if result.returncode == 0:
+                    info["linux_distro"] = result.stdout.split(":", 1)[1].strip() if ":" in result.stdout else result.stdout.strip()
+                else:
+                    # 尝试读取 /etc/os-release
+                    try:
+                        with open("/etc/os-release", "r") as f:
+                            for line in f:
+                                if line.startswith("PRETTY_NAME="):
+                                    info["linux_distro"] = line.split("=", 1)[1].strip().strip('"')
+                                    break
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
         # 主机名
         info["hostname"] = platform.node()
@@ -413,6 +465,10 @@ async def run_template(
         return any(p.glob("*")) if p.exists() else False
 
     baseline_needed = (not template.metadata.baseline_computed) or (not _has_files(Path(template.metadata.baseline.bitstream_dir)))
+
+    # 收集 Baseline 环境信息（编码前）
+    baseline_env = _env_info()
+
     baseline_outputs, baseline_perfs = await _encode_side(
         template.metadata.baseline,
         ordered_sources,
@@ -423,6 +479,9 @@ async def run_template(
     template.metadata.baseline_fingerprint = _fingerprint(template.metadata.baseline)
 
     # Experimental 编码/校验
+    # 收集 Experimental 环境信息（编码前）
+    experimental_env = _env_info()
+
     exp_outputs, exp_perfs = await _encode_side(
         template.metadata.experimental,
         [exp_map[s.path.stem] for s in ordered_sources],
@@ -573,7 +632,6 @@ async def run_template(
             }
         )
 
-    env = _env_info()
     result: Dict[str, Any] = {
         "kind": "template_metrics",
         "template_id": template.template_id,
@@ -596,7 +654,8 @@ async def run_template(
         "baseline_fingerprint": _fingerprint(template.metadata.baseline),
         "entries": report_entries,
         "bd_metrics": bd_metrics,
-        "environment": env,
+        "baseline_environment": baseline_env,
+        "experimental_environment": experimental_env,
     }
 
     if job:

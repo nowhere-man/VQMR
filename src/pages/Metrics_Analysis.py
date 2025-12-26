@@ -174,17 +174,17 @@ df = df.sort_values(by=["Video", "RC", "Point", "Side"])
 
 # ========== 侧边栏目录 ==========
 with st.sidebar:
-    st.markdown("### 📑 目录")
+    st.markdown("### 📑 Contents")
     st.markdown("""
 - [Metrics](#metrics)
   - [A vs B 对比](#a-vs-b-对比)
 - [BD-Rate](#bd-rate)
 - [BD-Metrics](#bd-metrics)
 - [Performance](#performance)
-  - [Diff](#perf-diff)
-  - [CPU占用折线图](#cpu-chart)
-  - [详细数据](#perf-details)
-- [环境信息](#环境信息)
+  - [Delta](#perf-diff)
+  - [CPU Usage](#cpu-chart)
+  - [Detalis](#perf-details)
+- [Machine Info](#环境信息)
 """, unsafe_allow_html=True)
 
 # 平滑滚动 CSS
@@ -256,7 +256,7 @@ if perf_rows:
     df_perf = pd.DataFrame(perf_rows)
 
     # 1. 汇总Diff表格
-    st.subheader("Diff", anchor="perf-diff")
+    st.subheader("Delta", anchor="perf-diff")
     base_perf = df_perf[df_perf["Side"] == "A"]
     exp_perf = df_perf[df_perf["Side"] == "B"]
     merged_perf = base_perf.merge(
@@ -298,7 +298,7 @@ if perf_rows:
         st.dataframe(styled_perf, use_container_width=True, hide_index=True)
 
     # 2. CPU折线图
-    st.subheader("CPU占用折线图", anchor="cpu-chart")
+    st.subheader("CPU Usage", anchor="cpu-chart")
 
     # 选择视频和点位
     video_list_perf = df_perf["Video"].unique().tolist()
@@ -336,7 +336,7 @@ if perf_rows:
         st.info("该视频/点位没有CPU采样数据。")
 
     # 3. 详细数据表格（默认折叠）
-    st.subheader("详细数据", anchor="perf-details")
+    st.subheader("Details", anchor="perf-details")
     with st.expander("查看详细性能数据", expanded=False):
         # 移除 cpu_samples 列用于展示
         df_perf_detail = df_perf.drop(columns=["cpu_samples"], errors="ignore")
@@ -344,13 +344,99 @@ if perf_rows:
 else:
     st.info("暂无性能数据。请确保编码任务已完成并采集了性能数据。")
 
-st.header("环境信息", anchor="环境信息")
+st.header("Machine Info", anchor="环境信息")
+
+def _format_env_info(env: Dict[str, Any]) -> str:
+    """格式化环境信息为 Markdown 列表"""
+    if not env:
+        return "未采集到环境信息。"
+
+    lines = []
+
+    # 系统信息
+    lines.append("**系统信息**")
+    os_name = env.get('os', 'N/A')
+    hostname = env.get('hostname', 'N/A')
+    linux_distro = env.get('linux_distro', '')
+
+    lines.append(f"- **操作系统**: {os_name}")
+    lines.append(f"- **主机名**: {hostname}")
+    if os_name == "Linux" and linux_distro:
+        lines.append(f"- **发行版**: {linux_distro}")
+
+    lines.append("")  # 空行
+
+    # CPU 信息
+    lines.append("**CPU 信息**")
+    cpu_model = env.get('cpu_model', env.get('cpu', 'N/A'))
+    cpu_arch = env.get('cpu_arch', 'N/A')
+    phys_cores = env.get('cpu_phys_cores', env.get('phys_cores', 'N/A'))
+    log_cores = env.get('cpu_log_cores', env.get('log_cores', 'N/A'))
+    cpu_freq = env.get('cpu_freq_mhz', 'N/A')
+    numa_nodes = env.get('numa_nodes', 'N/A')
+    cpu_percent = env.get('cpu_percent_before', env.get('cpu_percent_start', 'N/A'))
+
+    lines.append(f"- **CPU 型号**: {cpu_model}")
+    lines.append(f"- **CPU 架构**: {cpu_arch}")
+    lines.append(f"- **核心/线程**: {phys_cores}C/{log_cores}T")
+    lines.append(f"- **CPU 主频**: {cpu_freq} MHz")
+    lines.append(f"- **NUMA Nodes**: {numa_nodes}")
+    lines.append(f"- **CPU 占用率**: {cpu_percent}%")
+
+    lines.append("")  # 空行
+
+    # 内存信息
+    lines.append("**内存信息**")
+    # 兼容新旧格式
+    mem_total_gb = env.get('mem_total_gb')
+    mem_used_gb = env.get('mem_used_gb')
+    mem_available_gb = env.get('mem_available_gb')
+    mem_percent = env.get('mem_percent_used')
+
+    # 如果是旧格式（MB），转换为 GB
+    if mem_total_gb is None and env.get('mem_total_mb'):
+        try:
+            mem_total_gb = round(env.get('mem_total_mb') / 1024, 2)
+        except (ValueError, TypeError):
+            pass
+    if mem_available_gb is None and env.get('mem_available_mb'):
+        try:
+            mem_available_gb = round(env.get('mem_available_mb') / 1024, 2)
+        except (ValueError, TypeError):
+            pass
+    if mem_used_gb is None and mem_total_gb and mem_available_gb:
+        mem_used_gb = round(mem_total_gb - mem_available_gb, 2)
+
+    # 计算可用率
+    mem_avail_percent = None
+    if mem_percent is not None:
+        mem_avail_percent = round(100 - mem_percent, 1)
+    elif mem_total_gb and mem_available_gb:
+        mem_avail_percent = round((mem_available_gb / mem_total_gb) * 100, 1)
+
+    lines.append(f"- **总内存**: {mem_total_gb if mem_total_gb else 'N/A'} GB")
+    lines.append(f"- **已使用**: {mem_used_gb if mem_used_gb else 'N/A'} GB")
+    lines.append(f"- **可用内存**: {mem_available_gb if mem_available_gb else 'N/A'} GB")
+    lines.append(f"- **可用率**: {mem_avail_percent if mem_avail_percent is not None else 'N/A'}%")
+
+    lines.append("")  # 空行
+
+    # 其他信息
+    lines.append("**其他信息**")
+    exec_time = env.get('execution_time', 'N/A')
+    lines.append(f"- **运行时间**: {exec_time}")
+
+    return "\n".join(lines)
+
 env_a = data_a.get("environment") or {}
 env_b = data_b.get("environment") or {}
 if env_a or env_b:
-    st.markdown("**任务 A 环境**")
-    st.table(pd.DataFrame([{"项": k, "值": v} for k, v in env_a.items()]) if env_a else pd.DataFrame(columns=["项", "值"]))
-    st.markdown("**任务 B 环境**")
-    st.table(pd.DataFrame([{"项": k, "值": v} for k, v in env_b.items()]) if env_b else pd.DataFrame(columns=["项", "值"]))
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("任务 A")
+        st.markdown(_format_env_info(env_a))
+    with col2:
+        st.subheader("任务 B")
+        st.markdown(_format_env_info(env_b))
 else:
     st.info("未采集到环境信息。")

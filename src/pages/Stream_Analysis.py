@@ -64,16 +64,17 @@ def _plot_frame_lines(
         xaxis_title="Frame",
         yaxis_title=yaxis_title,
         hovermode="x unified",
-        legend=dict(orientation="h", y=-0.2),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
     )
     st.plotly_chart(fig, use_container_width=True)
 
 
 st.set_page_config(page_title="码流分析", page_icon="📊", layout="wide")
-st.markdown("<h1 style='text-align:center;'>📊 码流分析报告</h1>", unsafe_allow_html=True)
-st.subheader("全部码流分析报告")
+
 job_id = _get_job_id()
 if not job_id:
+    st.markdown("<h1 style='text-align:center;'>📊 码流分析报告</h1>", unsafe_allow_html=True)
+    st.subheader("全部码流分析报告")
     jobs = _list_bitstream_jobs()
     if not jobs:
         st.warning("暂未找到报告。请先创建任务。")
@@ -81,7 +82,7 @@ if not job_id:
 
     for item in jobs:
         jid = item["job_id"]
-        st.markdown(f"- <a href='?job_id={jid}' target='_blank'>{jid} · bitstream_analysis/report_data.json</a>", unsafe_allow_html=True)
+        st.markdown(f"- [{jid} · bitstream_analysis/report_data.json](?job_id={jid})", unsafe_allow_html=True)
     st.stop()
 
 # 保持 session_state，方便从首页跳转
@@ -106,10 +107,9 @@ if report.get("kind") != "bitstream_analysis":
 ref = report.get("reference", {}) or {}
 encoded_items = report.get("encoded", []) or []
 
-st.caption(
-    f"Job: {job_id} | Ref: {ref.get('label')} | "
-    f"{ref.get('width')}x{ref.get('height')} @ {ref.get('fps')} fps | {ref.get('frames')} frames"
-)
+# 显示报告标题
+ref_label = ref.get('label', 'Unknown')
+st.markdown(f"<h1 style='text-align:center;'>{ref_label} - 分析报告</h1>", unsafe_allow_html=True)
 
 if not encoded_items:
     st.warning("报告中未包含任何 Encoded 数据。")
@@ -117,13 +117,18 @@ if not encoded_items:
 
 # ========== 侧边栏目录 ==========
 with st.sidebar:
-    st.markdown("### 📑 目录")
+    st.markdown("### 📑 Contents")
     st.markdown("""
+- [Streams Info](#streams-info)
 - [Metrics](#metrics)
-  - [逐帧折线图](#逐帧折线图)
+  - [Delta](#delta)
+  - [PSNR](#psnr)
+  - [SSIM](#ssim)
+  - [VMAF](#vmaf)
+  - [VMAF-NEG](#vmaf-neg)
 - [Bitrate](#bitrate)
-  - [按时间间隔聚合的码率图](#按时间间隔聚合的码率图)
-  - [帧结构](#帧结构)
+  - [By Time](#by-time)
+  - [By Frame](#by-frame)
 """, unsafe_allow_html=True)
 
 # 平滑滚动 CSS
@@ -136,7 +141,55 @@ html {
 """, unsafe_allow_html=True)
 
 
-# ========== 1) Metrics ==========
+# ========== Streams Info ==========
+st.header("Streams Info", anchor="streams-info")
+
+stream_rows = []
+# Reference stream
+ref_format = ref.get("format", "YUV")
+ref_bitrate = None if ref_format.upper() == "YUV" else (ref.get("avg_bitrate_bps", 0) / 1000)
+stream_rows.append({
+    "Stream": ref.get("label", "Reference"),
+    "Format": ref_format,
+    "Width": ref.get("width"),
+    "Height": ref.get("height"),
+    "FPS": ref.get("fps"),
+    "Frames": ref.get("frames"),
+    "Avg Bitrate (kbps)": ref_bitrate,
+})
+
+# Encoded streams
+for item in encoded_items:
+    bitrate = item.get("bitrate", {}) or {}
+
+    # 计算帧数：优先使用 item.frames，否则从 bitrate 数据计算
+    frames = item.get("frames")
+    if not frames:
+        frame_sizes = bitrate.get("frame_sizes", []) or []
+        frames = len(frame_sizes) if frame_sizes else None
+
+    stream_rows.append({
+        "Stream": item.get("label"),
+        "Format": item.get("format"),
+        "Width": item.get("width"),
+        "Height": item.get("height"),
+        "FPS": item.get("fps"),
+        "Frames": frames,
+        "Avg Bitrate (kbps)": (bitrate.get("avg_bitrate_bps", 0) / 1000),
+    })
+
+df_streams = pd.DataFrame(stream_rows)
+# 格式化：Width/Height 为整数，FPS 为2位小数，Bitrate 为2位小数
+styled_streams = df_streams.style.format({
+    "Width": "{:.0f}",
+    "Height": "{:.0f}",
+    "FPS": "{:.2f}",
+    "Avg Bitrate (kbps)": "{:.2f}"
+}, na_rep="N/A")
+st.dataframe(styled_streams, use_container_width=True, hide_index=True)
+
+
+# ========== Metrics ==========
 st.header("Metrics", anchor="metrics")
 
 rows = []
@@ -198,9 +251,28 @@ display_df = pd.DataFrame(
     }
 )
 display_df.columns = pd.MultiIndex.from_tuples(base_columns)
-st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-# Diff vs first encoded (separate table, if 2+)
+# 格式化显示精度
+format_dict = {
+    ("PSNR", "Y"): "{:.4f}",
+    ("PSNR", "U"): "{:.4f}",
+    ("PSNR", "V"): "{:.4f}",
+    ("PSNR", "AVG"): "{:.4f}",
+    ("SSIM", "Y"): "{:.4f}",
+    ("SSIM", "U"): "{:.4f}",
+    ("SSIM", "V"): "{:.4f}",
+    ("SSIM", "AVG"): "{:.4f}",
+    ("VMAF", "VMAF"): "{:.2f}",
+    ("VMAF", "VMAF_neg"): "{:.2f}",
+    ("Bitrate", "Avg kbps"): "{:.2f}",
+}
+
+# 显示原始数据表格
+styled_overall = display_df.style.format(format_dict, na_rep="-")
+st.dataframe(styled_overall, use_container_width=True, hide_index=True)
+
+# Delta 表格
+st.subheader("Delta", anchor="delta")
 if len(df_metrics) >= 2:
     base = df_metrics.iloc[0]
     diff_data = {
@@ -220,92 +292,102 @@ if len(df_metrics) >= 2:
     diff_df = pd.DataFrame(diff_data)
     diff_df.iloc[0, 1:] = 0  # 基准行显示 0
     diff_df.columns = pd.MultiIndex.from_tuples(base_columns)
-    st.markdown("**Δ 相对于第一个 Encoded**")
-    st.dataframe(diff_df, use_container_width=True, hide_index=True)
 
-st.subheader("逐帧折线图", anchor="逐帧折线图")
+    # 定义颜色样式函数
+    def _color_diff(val):
+        if pd.isna(val) or not isinstance(val, (int, float)):
+            return ""
+        if val > 0:
+            return "color: green"
+        elif val < 0:
+            return "color: red"
+        return ""
 
-tab_psnr, tab_ssim, tab_vmaf, tab_vmaf_neg = st.tabs(
-    ["PSNR", "SSIM", "VMAF", "VMAF-NEG"]
+    # 应用颜色样式和格式化精度到所有数值列（除了第一列 Encoded）
+    styled_diff = diff_df.style.applymap(_color_diff, subset=diff_df.columns[1:]).format(format_dict, na_rep="-")
+    st.dataframe(styled_diff, use_container_width=True, hide_index=True)
+
+# PSNR 逐帧折线图
+st.subheader("PSNR", anchor="psnr")
+comp = st.selectbox("分量", ["avg", "y", "u", "v"], key="psnr_comp")
+key_map = {"avg": "psnr_avg", "y": "psnr_y", "u": "psnr_u", "v": "psnr_v"}
+metric_key = key_map[comp]
+_plot_frame_lines(
+    encoded_items,
+    lambda item: (((item.get("metrics") or {}).get("psnr") or {}).get("frames") or {}).get(metric_key, []),
+    f"PSNR ({metric_key}) - 每帧",
+    "PSNR (dB)",
 )
 
-with tab_psnr:
-    comp = st.selectbox("分量", ["avg", "y", "u", "v"], key="psnr_comp")
-    key_map = {"avg": "psnr_avg", "y": "psnr_y", "u": "psnr_u", "v": "psnr_v"}
-    metric_key = key_map[comp]
-    _plot_frame_lines(
-        encoded_items,
-        lambda item: (((item.get("metrics") or {}).get("psnr") or {}).get("frames") or {}).get(metric_key, []),
-        f"PSNR ({metric_key}) - 每帧",
-        "PSNR (dB)",
-    )
+# SSIM 逐帧折线图
+st.subheader("SSIM", anchor="ssim")
+comp = st.selectbox("分量", ["avg", "y", "u", "v"], key="ssim_comp")
+key_map = {"avg": "ssim_avg", "y": "ssim_y", "u": "ssim_u", "v": "ssim_v"}
+metric_key = key_map[comp]
+_plot_frame_lines(
+    encoded_items,
+    lambda item: (((item.get("metrics") or {}).get("ssim") or {}).get("frames") or {}).get(metric_key, []),
+    f"SSIM ({metric_key}) - 每帧",
+    "SSIM",
+)
 
-with tab_ssim:
-    comp = st.selectbox("分量", ["avg", "y", "u", "v"], key="ssim_comp")
-    key_map = {"avg": "ssim_avg", "y": "ssim_y", "u": "ssim_u", "v": "ssim_v"}
-    metric_key = key_map[comp]
-    _plot_frame_lines(
-        encoded_items,
-        lambda item: (((item.get("metrics") or {}).get("ssim") or {}).get("frames") or {}).get(metric_key, []),
-        f"SSIM ({metric_key}) - 每帧",
-        "SSIM",
-    )
-
+# VMAF 逐帧折线图
 def _get_vmaf_frames(item: Dict[str, Any]) -> Dict[str, List[Any]]:
     return (((item.get("metrics") or {}).get("vmaf") or {}).get("frames") or {})
 
-with tab_vmaf:
-    available_vmaf_metrics = set()
-    for item in encoded_items:
-        frames_dict = _get_vmaf_frames(item)
-        for key, vals in frames_dict.items():
-            if key == "vmaf_neg":
-                continue
-            if isinstance(vals, list) and any(v is not None for v in vals):
-                available_vmaf_metrics.add(key)
+st.subheader("VMAF", anchor="vmaf")
+available_vmaf_metrics = set()
+for item in encoded_items:
+    frames_dict = _get_vmaf_frames(item)
+    for key, vals in frames_dict.items():
+        if key == "vmaf_neg":
+            continue
+        if isinstance(vals, list) and any(v is not None for v in vals):
+            available_vmaf_metrics.add(key)
 
-    if not available_vmaf_metrics:
-        st.info("该报告未包含 VMAF 帧级数据。")
-    else:
-        preferred_order = [
-            "vmaf",
-            "adm2",
-            "motion2",
-            "vif_scale0",
-            "vif_scale1",
-            "vif_scale2",
-            "vif_scale3",
-        ]
-        ordered_metrics: List[str] = []
-        for key in preferred_order:
-            if key in available_vmaf_metrics:
-                ordered_metrics.append(key)
-                available_vmaf_metrics.discard(key)
-        ordered_metrics.extend(sorted(available_vmaf_metrics))
+if not available_vmaf_metrics:
+    st.info("该报告未包含 VMAF 帧级数据。")
+else:
+    preferred_order = [
+        "vmaf",
+        "adm2",
+        "motion2",
+        "vif_scale0",
+        "vif_scale1",
+        "vif_scale2",
+        "vif_scale3",
+    ]
+    ordered_metrics: List[str] = []
+    for key in preferred_order:
+        if key in available_vmaf_metrics:
+            ordered_metrics.append(key)
+            available_vmaf_metrics.discard(key)
+    ordered_metrics.extend(sorted(available_vmaf_metrics))
 
-        default_metric = "vmaf" if "vmaf" in ordered_metrics else ordered_metrics[0]
-        default_index = ordered_metrics.index(default_metric)
-        selected_metric = st.selectbox(
-            "选择要绘制的 VMAF / 子特征指标（单选）",
-            ordered_metrics,
-            index=default_index,
-            key="vmaf_metric",
-        )
-        display_name = selected_metric.upper()
-        _plot_frame_lines(
-            encoded_items,
-            lambda item, metric_key=selected_metric: _get_vmaf_frames(item).get(metric_key, []),
-            f"{display_name} - 每帧",
-            display_name,
-        )
-
-with tab_vmaf_neg:
+    default_metric = "vmaf" if "vmaf" in ordered_metrics else ordered_metrics[0]
+    default_index = ordered_metrics.index(default_metric)
+    selected_metric = st.selectbox(
+        "选择要绘制的 VMAF / 子特征指标（单选）",
+        ordered_metrics,
+        index=default_index,
+        key="vmaf_metric",
+    )
+    display_name = selected_metric.upper()
     _plot_frame_lines(
         encoded_items,
-        lambda item: _get_vmaf_frames(item).get("vmaf_neg", []),
-        "VMAF-NEG - 每帧",
-        "VMAF-NEG",
+        lambda item, metric_key=selected_metric: _get_vmaf_frames(item).get(metric_key, []),
+        f"{display_name} - 每帧",
+        display_name,
     )
+
+# VMAF-NEG 逐帧折线图
+st.subheader("VMAF-NEG", anchor="vmaf-neg")
+_plot_frame_lines(
+    encoded_items,
+    lambda item: _get_vmaf_frames(item).get("vmaf_neg", []),
+    "VMAF-NEG - 每帧",
+    "VMAF-NEG",
+)
 
 
 # ========== 2) Bitrate ==========
@@ -321,9 +403,11 @@ for item in encoded_items:
         }
     )
 
-st.dataframe(pd.DataFrame(bitrate_rows), use_container_width=True, hide_index=True)
+df_bitrate = pd.DataFrame(bitrate_rows)
+styled_bitrate = df_bitrate.style.format({"Avg Bitrate (kbps)": "{:.2f}"}, na_rep="-")
+st.dataframe(styled_bitrate, use_container_width=True, hide_index=True)
 
-st.subheader("按时间间隔聚合的码率图", anchor="按时间间隔聚合的码率图")
+st.subheader("By Time", anchor="by-time")
 
 # 默认展示柱状图
 chart_type = st.selectbox("图形类型", ["柱状图", "折线图"], key="br_chart_type", index=0)
@@ -356,7 +440,6 @@ for item in encoded_items:
                 y=y_kbps,
                 mode="lines+markers",
                 name=item.get("label"),
-                line_shape="hv",  # 平行线过渡
             )
         )
 
@@ -366,11 +449,12 @@ fig.update_layout(
     yaxis_title="Bitrate (kbps)",
     hovermode="x unified",
     barmode="group",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
 )
 st.plotly_chart(fig, use_container_width=True)
 
-st.subheader("帧结构", anchor="帧结构")
-st.caption("颜色提示：I/IDR=蓝, P=绿, B=橙, RAW/UNK=灰；多个 Encoded 叠加显示。")
+st.subheader("By Frame", anchor="by-frame")
+st.caption("颜色提示：I/IDR=蓝, P=绿, B=橙, RAW/UNK=灰。")
 
 color_map = {
     "I": "#2563eb",
@@ -411,6 +495,7 @@ fig_frames.update_layout(
     yaxis_title="Bytes",
     barmode="group",
     hovermode="x unified",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
 )
 
 st.plotly_chart(fig_frames, use_container_width=True)

@@ -519,12 +519,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 仅在 processing 时自动轮询
-  if (lastStatus === 'processing') {
+  // 在 pending 或 processing 时自动轮询
+  if (lastStatus === 'pending' || lastStatus === 'processing') {
     pollTimer = setInterval(refresh, 2000);
     refresh();
   } else {
-    // 非 processing 状态下仅渲染一次
+    // 非 pending/processing 状态下仅渲染一次
     renderLogs({{ job.command_logs | tojson | safe }});
   }
 });

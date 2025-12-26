@@ -373,6 +373,10 @@ async def build_bitstream_report(
         encoded_reports.append(
             {
                 "label": enc_label,
+                "format": enc_codec or "Unknown",
+                "width": enc_width,
+                "height": enc_height,
+                "fps": enc_fps,
                 "input_format": enc_fmt or "auto",
                 "codec": enc_codec,
                 "scaled_to_reference": scaled,

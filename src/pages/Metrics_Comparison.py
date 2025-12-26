@@ -42,10 +42,10 @@ def _load_report(job_id: str) -> Dict[str, Any]:
 
 
 st.set_page_config(page_title="Metrics对比", page_icon="📊", layout="wide")
-st.markdown("<h1 style='text-align:center;'>📊 Metrics对比报告</h1>", unsafe_allow_html=True)
 
 job_id = _get_job_id()
 if not job_id:
+    st.markdown("<h1 style='text-align:center;'>📊 Metrics对比报告</h1>", unsafe_allow_html=True)
     jobs = _list_template_jobs()
     if not jobs:
         st.warning("暂未找到报告，请先创建任务。")
@@ -54,19 +54,10 @@ if not job_id:
     for item in jobs:
         jid = item["job_id"]
         st.markdown(
-            f"- <a href='?template_job_id={jid}' target='_blank'>{jid} · metrics_analysis/report_data.json</a>",
+            f"- [{jid} · metrics_analysis/report_data.json](?template_job_id={jid})",
             unsafe_allow_html=True,
         )
     st.stop()
-else:
-    # 提供返回列表入口，清空参数后回到列表视图
-    if st.button("返回报告列表", type="secondary"):
-        try:
-            st.query_params.clear()
-        except Exception:
-            pass
-        st.session_state.pop("template_job_id", None)
-        st.rerun()
 
 st.session_state["template_job_id"] = job_id
 try:
@@ -88,27 +79,34 @@ if report.get("kind") != "template_metrics":
 entries: List[Dict[str, Any]] = report.get("entries", []) or []
 bd_list: List[Dict[str, Any]] = report.get("bd_metrics", []) or []
 
-st.caption(
-    f"Job: {job_id} | 模板: {report.get('template_name') or report.get('template_id')} | "
-    f"码控: {report.get('rate_control')} | 点位: {', '.join(str(p) for p in report.get('bitrate_points') or [])}"
-)
+# 显示报告标题
+template_name = report.get('template_name') or report.get('template_id', 'Unknown')
+st.markdown(f"<h1 style='text-align:center;'>{template_name} - {job_id} - Metrics对比</h1>", unsafe_allow_html=True)
 
 # ========== 侧边栏目录 ==========
 with st.sidebar:
-    st.markdown("### 📑 目录")
+    st.markdown("### 📑 Contents")
     st.markdown("""
 - [Metrics](#metrics)
-  - [RD Curve](#rd-curve)
+  - [RD Curves](#rd-curve)
   - [Delta](#delta)
   - [Details](#details)
 - [BD-Rate](#bd-rate)
+  - [BD-Rate PSNR](#bd-rate-psnr)
+  - [BD-Rate SSIM](#bd-rate-ssim)
+  - [BD-Rate VMAF](#bd-rate-vmaf)
+  - [BD-Rate VMAF-NEG](#bd-rate-vmaf-neg)
 - [BD-Metrics](#bd-metrics)
-- [码率分析](#码率分析)
+  - [BD PSNR](#bd-psnr)
+  - [BD SSIM](#bd-ssim)
+  - [BD VMAF](#bd-vmaf)
+  - [BD VMAF-NEG](#bd-vmaf-neg)
+- [Bitrates](#码率分析)
 - [Performance](#performance)
-  - [Diff](#perf-diff)
-  - [CPU占用折线图](#cpu-chart)
-  - [详细数据](#perf-details)
-- [环境信息](#环境信息)
+  - [Delta](#perf-diff)
+  - [CPU Usage](#cpu-chart)
+  - [Details](#perf-details)
+- [Machine Info](#环境信息)
 """, unsafe_allow_html=True)
 
 # 平滑滚动 CSS
@@ -155,7 +153,7 @@ if df_metrics.empty:
     st.stop()
 
 # RD Curve
-st.subheader("RD Curve", anchor="rd-curve")
+st.subheader("RD Curves", anchor="rd-curve")
 video_list = df_metrics["Video"].unique().tolist()
 metric_options = ["PSNR", "SSIM", "VMAF", "VMAF-NEG"]
 
@@ -193,11 +191,11 @@ fig_rd.add_trace(
     )
 )
 fig_rd.update_layout(
-    title=f"RD Curve - {selected_video}",
+    title=f"RD Curves - {selected_video}",
     xaxis_title="Bitrate (kbps)",
     yaxis_title=selected_metric,
     hovermode="x unified",
-    legend=dict(orientation="h", y=-0.15),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
 )
 with col_chart:
     st.plotly_chart(fig_rd, use_container_width=True)
@@ -240,7 +238,16 @@ if not merged.empty:
         return ""
 
     diff_cols = ["Bitrate Δ%", "PSNR Δ", "SSIM Δ", "VMAF Δ", "VMAF-NEG Δ"]
-    styled_df = diff_df.style.applymap(_color_diff, subset=diff_cols)
+
+    # 格式化精度
+    format_dict = {
+        "Bitrate Δ%": "{:.2f}",
+        "PSNR Δ": "{:.4f}",
+        "SSIM Δ": "{:.4f}",
+        "VMAF Δ": "{:.2f}",
+        "VMAF-NEG Δ": "{:.2f}",
+    }
+    styled_df = diff_df.style.applymap(_color_diff, subset=diff_cols).format(format_dict, na_rep="-")
 
     st.subheader("Delta", anchor="delta")
     st.dataframe(
@@ -255,7 +262,16 @@ if not merged.empty:
 # 详细表格（默认折叠）
 st.subheader("Details", anchor="details")
 with st.expander("查看详细Metrics数据", expanded=False):
-    st.dataframe(df_metrics.sort_values(by=["Video", "RC", "Point", "Side"]), use_container_width=True, hide_index=True)
+    # 格式化精度
+    details_format = {
+        "Bitrate_kbps": "{:.2f}",
+        "PSNR": "{:.4f}",
+        "SSIM": "{:.4f}",
+        "VMAF": "{:.2f}",
+        "VMAF-NEG": "{:.2f}",
+    }
+    styled_details = df_metrics.sort_values(by=["Video", "RC", "Point", "Side"]).style.format(details_format, na_rep="-")
+    st.dataframe(styled_details, use_container_width=True, hide_index=True)
 
 
 # ========== BD-Rate ==========
@@ -286,14 +302,15 @@ if bd_list:
     styled_bd_rate = bd_rate_display.style.applymap(
         _color_bd_rate,
         subset=["BD-Rate PSNR (%)", "BD-Rate SSIM (%)", "BD-Rate VMAF (%)", "BD-Rate VMAF-NEG (%)"],
-    )
+    ).format({
+        "BD-Rate PSNR (%)": "{:.2f}",
+        "BD-Rate SSIM (%)": "{:.2f}",
+        "BD-Rate VMAF (%)": "{:.2f}",
+        "BD-Rate VMAF-NEG (%)": "{:.2f}",
+    }, na_rep="-")
     st.dataframe(styled_bd_rate, use_container_width=True, hide_index=True)
 
-    # BD-Rate 柱状图（Tab 页形式）
-    tab_psnr, tab_ssim, tab_vmaf, tab_vmaf_neg = st.tabs(
-        ["BD-Rate PSNR", "BD-Rate SSIM", "BD-Rate VMAF", "BD-Rate VMAF-NEG"]
-    )
-
+    # BD-Rate 柱状图（拆分为独立子标题）
     def _create_bd_bar_chart(df, col, title):
         colors = ["green" if v < 0 else "red" if v > 0 else "gray" for v in df[col].fillna(0)]
         fig = go.Figure()
@@ -314,14 +331,17 @@ if bd_list:
         )
         return fig
 
-    with tab_psnr:
-        st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_psnr", "BD-Rate PSNR"), use_container_width=True)
-    with tab_ssim:
-        st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_ssim", "BD-Rate SSIM"), use_container_width=True)
-    with tab_vmaf:
-        st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_vmaf", "BD-Rate VMAF"), use_container_width=True)
-    with tab_vmaf_neg:
-        st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_vmaf_neg", "BD-Rate VMAF-NEG"), use_container_width=True)
+    st.subheader("BD-Rate PSNR", anchor="bd-rate-psnr")
+    st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_psnr", "BD-Rate PSNR, the less, the better"), use_container_width=True)
+
+    st.subheader("BD-Rate SSIM", anchor="bd-rate-ssim")
+    st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_ssim", "BD-Rate SSIM, the less, the better"), use_container_width=True)
+
+    st.subheader("BD-Rate VMAF", anchor="bd-rate-vmaf")
+    st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_vmaf", "BD-Rate VMAF, the less, the better"), use_container_width=True)
+
+    st.subheader("BD-Rate VMAF-NEG", anchor="bd-rate-vmaf-neg")
+    st.plotly_chart(_create_bd_bar_chart(df_bd, "bd_rate_vmaf_neg", "BD-Rate VMAF-NEG, the less, the better"), use_container_width=True)
 else:
     st.info("暂无 BD-Rate 数据。")
 
@@ -354,14 +374,15 @@ if bd_list:
     styled_bd_metrics = bd_metrics_display.style.applymap(
         _color_bd_metrics,
         subset=["BD PSNR", "BD SSIM", "BD VMAF", "BD VMAF-NEG"],
-    )
+    ).format({
+        "BD PSNR": "{:.4f}",
+        "BD SSIM": "{:.4f}",
+        "BD VMAF": "{:.2f}",
+        "BD VMAF-NEG": "{:.2f}",
+    }, na_rep="-")
     st.dataframe(styled_bd_metrics, use_container_width=True, hide_index=True)
 
-    # BD-Metrics 柱状图（Tab 页形式）
-    tab_bd_psnr, tab_bd_ssim, tab_bd_vmaf, tab_bd_vmaf_neg = st.tabs(
-        ["BD PSNR", "BD SSIM", "BD VMAF", "BD VMAF-NEG"]
-    )
-
+    # BD-Metrics 柱状图（拆分为独立子标题）
     def _create_bd_metrics_bar_chart(df, col, title):
         colors = ["green" if v > 0 else "red" if v < 0 else "gray" for v in df[col].fillna(0)]
         fig = go.Figure()
@@ -382,20 +403,23 @@ if bd_list:
         )
         return fig
 
-    with tab_bd_psnr:
-        st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_psnr", "BD PSNR"), use_container_width=True)
-    with tab_bd_ssim:
-        st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_ssim", "BD SSIM"), use_container_width=True)
-    with tab_bd_vmaf:
-        st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_vmaf", "BD VMAF"), use_container_width=True)
-    with tab_bd_vmaf_neg:
-        st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_vmaf_neg", "BD VMAF-NEG"), use_container_width=True)
+    st.subheader("BD PSNR", anchor="bd-psnr")
+    st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_psnr", "BD PSNR, the more, the better"), use_container_width=True)
+
+    st.subheader("BD SSIM", anchor="bd-ssim")
+    st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_ssim", "BD SSIM, the more, the better"), use_container_width=True)
+
+    st.subheader("BD VMAF", anchor="bd-vmaf")
+    st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_vmaf", "BD VMAF, the more, the better"), use_container_width=True)
+
+    st.subheader("BD VMAF-NEG", anchor="bd-vmaf-neg")
+    st.plotly_chart(_create_bd_metrics_bar_chart(df_bdm, "bd_vmaf_neg", "BD VMAF-NEG"), use_container_width=True)
 else:
     st.info("暂无 BD-Metrics 数据。")
 
 
 # ========== Bitrate 分析 ==========
-st.header("码率分析", anchor="码率分析")
+st.header("Bitrates", anchor="码率分析")
 
 # 构建可选的视频和点位列表
 video_point_options = []
@@ -476,15 +500,15 @@ if video_point_options:
             fig_br.add_trace(go.Bar(x=exp_x, y=exp_y, name="Experimental", opacity=0.7))
             fig_br.update_layout(barmode="group")
         else:
-            fig_br.add_trace(go.Scatter(x=base_x, y=base_y, mode="lines+markers", name="Baseline", line_shape="hv"))
-            fig_br.add_trace(go.Scatter(x=exp_x, y=exp_y, mode="lines+markers", name="Experimental", line_shape="hv"))
+            fig_br.add_trace(go.Scatter(x=base_x, y=base_y, mode="lines+markers", name="Baseline"))
+            fig_br.add_trace(go.Scatter(x=exp_x, y=exp_y, mode="lines+markers", name="Experimental"))
 
         fig_br.update_layout(
             title=f"码率对比 - {selected_video_br} ({selected_point_br})",
             xaxis_title="Time (s)",
             yaxis_title="Bitrate (kbps)",
             hovermode="x unified",
-            legend=dict(orientation="h", y=-0.15),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
         )
         st.plotly_chart(fig_br, use_container_width=True)
 
@@ -556,7 +580,7 @@ if perf_rows:
     df_perf = pd.DataFrame(perf_rows)
 
     # 1. 汇总Diff表格
-    st.subheader("Diff", anchor="perf-diff")
+    st.subheader("Delta", anchor="perf-diff")
     base_perf = df_perf[df_perf["Side"] == "Baseline"]
     exp_perf = df_perf[df_perf["Side"] == "Experimental"]
     merged_perf = base_perf.merge(
@@ -594,11 +618,20 @@ if perf_rows:
                 return "color: red"
             return ""
 
-        styled_perf = diff_perf_df.style.applymap(_color_perf_diff, subset=["Δ FPS", "Δ CPU Avg(%)"])
+        # 格式化精度：FPS 和 CPU 都保留2位小数
+        perf_format_dict = {
+            "Baseline FPS": "{:.2f}",
+            "Exp FPS": "{:.2f}",
+            "Δ FPS": "{:.2f}",
+            "Baseline CPU(%)": "{:.2f}",
+            "Exp CPU(%)": "{:.2f}",
+            "Δ CPU Avg(%)": "{:.2f}",
+        }
+        styled_perf = diff_perf_df.style.applymap(_color_perf_diff, subset=["Δ FPS", "Δ CPU Avg(%)"]).format(perf_format_dict, na_rep="-")
         st.dataframe(styled_perf, use_container_width=True, hide_index=True)
 
     # 2. CPU折线图
-    st.subheader("CPU占用折线图", anchor="cpu-chart")
+    st.subheader("CPU Usage", anchor="cpu-chart")
 
     # 选择视频和点位
     video_list_perf = df_perf["Video"].unique().tolist()
@@ -636,72 +669,110 @@ if perf_rows:
         st.info("该视频/点位没有CPU采样数据。")
 
     # 3. 详细数据表格（默认折叠）
-    st.subheader("详细数据", anchor="perf-details")
+    st.subheader("Details", anchor="perf-details")
     with st.expander("查看详细性能数据", expanded=False):
         df_perf_detail = pd.DataFrame(perf_detail_rows)
-        st.dataframe(df_perf_detail.sort_values(by=["Video", "Point", "Side"]), use_container_width=True, hide_index=True)
+        # 格式化精度：FPS 和 CPU 保留2位小数
+        perf_detail_format = {
+            "FPS": "{:.2f}",
+            "CPU Avg(%)": "{:.2f}",
+            "CPU Max(%)": "{:.2f}",
+            "Total Time(s)": "{:.2f}",
+        }
+        styled_perf_detail = df_perf_detail.sort_values(by=["Video", "Point", "Side"]).style.format(perf_detail_format, na_rep="-")
+        st.dataframe(styled_perf_detail, use_container_width=True, hide_index=True)
 else:
     st.info("暂无性能数据。请确保编码任务已完成并采集了性能数据。")
 
 # ========== 环境信息 ==========
-st.header("环境信息", anchor="环境信息")
-env = report.get("environment") or {}
-if env:
-    # 使用卡片式布局展示环境信息
-    col1, col2 = st.columns(2)
+st.header("Machine Info", anchor="环境信息")
 
-    with col1:
-        st.subheader("系统信息")
-        os_name = env.get('os', 'N/A')
-        os_version = env.get('os_version', '')
-        os_full = env.get('os_full', env.get('os', 'N/A'))
-        hostname = env.get('hostname', 'N/A')
-        exec_time = env.get('execution_time', 'N/A')
+def _format_env_info(env: Dict[str, Any]) -> str:
+    """格式化环境信息为 Markdown 列表"""
+    if not env:
+        return "未采集到环境信息。"
 
-        st.markdown(f"""
-- **执行时间**: {exec_time}
-- **操作系统**: {os_name} {os_version}
-- **主机名**: {hostname}
-""")
+    lines = []
 
-    with col2:
-        st.subheader("CPU 信息")
-        cpu_arch = env.get('cpu_arch', 'N/A')
-        cpu_model = env.get('cpu_model', env.get('cpu', 'N/A'))
-        phys_cores = env.get('cpu_phys_cores', env.get('phys_cores', 'N/A'))
-        log_cores = env.get('cpu_log_cores', env.get('log_cores', 'N/A'))
-        cpu_percent = env.get('cpu_percent_before', env.get('cpu_percent_start', 'N/A'))
+    # 系统信息
+    lines.append("**系统信息**")
+    os_name = env.get('os', 'N/A')
+    hostname = env.get('hostname', 'N/A')
+    linux_distro = env.get('linux_distro', '')
 
-        st.markdown(f"""
-- **CPU 型号**: {cpu_model}
-- **CPU 架构**: {cpu_arch}
-- **核心/线程**: {phys_cores} / {log_cores}
-- **执行前占用**: {cpu_percent}%
-""")
+    lines.append(f"- **操作系统**: {os_name}")
+    lines.append(f"- **主机名**: {hostname}")
+    if os_name == "Linux" and linux_distro:
+        lines.append(f"- **发行版**: {linux_distro}")
 
-    st.subheader("内存信息")
-    # 兼容旧格式和新格式
-    mem_total = env.get('mem_total_mb')
-    mem_available = env.get('mem_available_mb')
-    if mem_total is None and env.get('mem_total'):
-        try:
-            mem_total = round(int(env.get('mem_total')) / (1024 * 1024), 2)
-        except (ValueError, TypeError):
-            mem_total = None
-    if mem_available is None and env.get('mem_available'):
-        try:
-            mem_available = round(int(env.get('mem_available')) / (1024 * 1024), 2)
-        except (ValueError, TypeError):
-            mem_available = None
+    lines.append("")  # 空行
 
+    # CPU 信息
+    lines.append("**CPU 信息**")
+    cpu_model = env.get('cpu_model', env.get('cpu', 'N/A'))
+    cpu_arch = env.get('cpu_arch', 'N/A')
+    phys_cores = env.get('cpu_phys_cores', env.get('phys_cores', 'N/A'))
+    log_cores = env.get('cpu_log_cores', env.get('log_cores', 'N/A'))
+    cpu_freq = env.get('cpu_freq_mhz', 'N/A')
+    numa_nodes = env.get('numa_nodes', 'N/A')
+    cpu_percent = env.get('cpu_percent_before', env.get('cpu_percent_start', 'N/A'))
+
+    lines.append(f"- **CPU 型号**: {cpu_model}")
+    lines.append(f"- **CPU 架构**: {cpu_arch}")
+    lines.append(f"- **核心/线程**: {phys_cores}C/{log_cores}T")
+    lines.append(f"- **CPU 主频**: {cpu_freq} MHz")
+    lines.append(f"- **NUMA Nodes**: {numa_nodes}")
+    lines.append(f"- **CPU 占用率**: {cpu_percent}%")
+
+    lines.append("")  # 空行
+
+    # 内存信息
+    lines.append("**内存信息**")
+    # 兼容新旧格式
+    mem_total_gb = env.get('mem_total_gb')
+    mem_used_gb = env.get('mem_used_gb')
+    mem_available_gb = env.get('mem_available_gb')
     mem_percent = env.get('mem_percent_used')
-    # 如果没有 mem_percent_used，从 total 和 available 计算
-    if mem_percent is None and mem_total and mem_available:
-        mem_percent = round((1 - mem_available / mem_total) * 100, 1)
 
-    col_m1, col_m2, col_m3 = st.columns(3)
-    col_m1.metric("内存总量", f"{mem_total:.0f} MB" if mem_total else 'N/A')
-    col_m2.metric("执行前可用", f"{mem_available:.0f} MB" if mem_available else 'N/A')
-    col_m3.metric("内存使用率", f"{mem_percent}%" if mem_percent is not None else 'N/A')
+    # 如果是旧格式（MB），转换为 GB
+    if mem_total_gb is None and env.get('mem_total_mb'):
+        try:
+            mem_total_gb = round(env.get('mem_total_mb') / 1024, 2)
+        except (ValueError, TypeError):
+            pass
+    if mem_available_gb is None and env.get('mem_available_mb'):
+        try:
+            mem_available_gb = round(env.get('mem_available_mb') / 1024, 2)
+        except (ValueError, TypeError):
+            pass
+    if mem_used_gb is None and mem_total_gb and mem_available_gb:
+        mem_used_gb = round(mem_total_gb - mem_available_gb, 2)
+
+    # 计算可用率
+    mem_avail_percent = None
+    if mem_percent is not None:
+        mem_avail_percent = round(100 - mem_percent, 1)
+    elif mem_total_gb and mem_available_gb:
+        mem_avail_percent = round((mem_available_gb / mem_total_gb) * 100, 1)
+
+    lines.append(f"- **总内存**: {mem_total_gb if mem_total_gb else 'N/A'} GB")
+    lines.append(f"- **已使用**: {mem_used_gb if mem_used_gb else 'N/A'} GB")
+    lines.append(f"- **可用内存**: {mem_available_gb if mem_available_gb else 'N/A'} GB")
+    lines.append(f"- **可用率**: {mem_avail_percent if mem_avail_percent is not None else 'N/A'}%")
+
+    lines.append("")  # 空行
+
+    # 其他信息
+    lines.append("**其他信息**")
+    exec_time = env.get('execution_time', 'N/A')
+    lines.append(f"- **运行时间**: {exec_time}")
+
+    return "\n".join(lines)
+
+# 使用 baseline_environment（任务开始时的环境状态）
+env = report.get("baseline_environment") or report.get("experimental_environment") or {}
+
+if env:
+    st.markdown(_format_env_info(env))
 else:
     st.write("未采集到环境信息。")
