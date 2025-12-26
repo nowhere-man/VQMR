@@ -96,10 +96,19 @@ if report.get("kind") != "template_metrics":
 entries: List[Dict[str, Any]] = report.get("entries", []) or []
 bd_list: List[Dict[str, Any]] = report.get("bd_metrics", []) or []
 
+# 隐藏默认的 pages 导航，只显示 Contents 目录
+st.markdown("""
+<style>
+    [data-testid="stSidebarNav"] {
+        display: none;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # 显示报告标题
 template_name = report.get('template_name') or report.get('template_id', 'Unknown')
-st.markdown(f"<h1 style='text-align:center;'>{template_name} - {job_id} - Metrics对比</h1>", unsafe_allow_html=True)
-
+st.markdown(f"<h1 style='text-align:center;'>{template_name} - 对比报告</h1>", unsafe_allow_html=True)
+st.markdown(f"<h4 style='text-align:right;'>{job_id}</h4>", unsafe_allow_html=True)
 # ========== 侧边栏目录 ==========
 with st.sidebar:
     st.markdown("### 📑 Contents")

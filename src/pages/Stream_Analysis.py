@@ -127,6 +127,15 @@ if report.get("kind") != "bitstream_analysis":
 ref = report.get("reference", {}) or {}
 encoded_items = report.get("encoded", []) or []
 
+# 隐藏默认的 pages 导航，只显示 Contents 目录
+st.markdown("""
+<style>
+    [data-testid="stSidebarNav"] {
+        display: none;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # 显示报告标题
 ref_label = ref.get('label', 'Unknown')
 st.markdown(f"<h1 style='text-align:center;'>{ref_label} - 分析报告</h1>", unsafe_allow_html=True)

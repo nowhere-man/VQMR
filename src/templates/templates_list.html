@@ -111,6 +111,7 @@ function renderTemplates() {
       <div class="flex items-center justify-between text-xs text-gray-500">
         <span>创建时间：${tpl.created_at ? tpl.created_at.replace('T',' ').split('.')[0] : ''}</span>
         <div class="space-x-2">
+          <button data-id="${tpl.template_id}" data-type="${tpl.template_type}" class="inline-flex items-center px-3 py-1 rounded border border-green-500 text-sm text-green-600 hover:bg-green-50 execute-btn">创建任务</button>
           <a href="/templates/${tpl.template_id}" class="inline-flex items-center px-3 py-1 rounded border border-gray-300 text-sm text-gray-700 hover:bg-gray-100">查看</a>
           <a href="/templates/${tpl.template_id}/edit${tpl.template_type === 'metrics_analysis' ? '?type=metrics' : ''}" class="inline-flex items-center px-3 py-1 rounded border border-blue-500 text-sm text-blue-600 hover:bg-blue-50">编辑</a>
           <button data-id="${tpl.template_id}" data-type="${tpl.template_type}" class="inline-flex items-center px-3 py-1 rounded border border-red-400 text-sm text-red-600 hover:bg-red-50 delete-btn">删除</button>
@@ -120,6 +121,7 @@ function renderTemplates() {
     grid.appendChild(card);
   });
   bindDelete();
+  bindExecute();
 }
 
 function bindDelete() {
@@ -145,6 +147,36 @@ async function deleteTemplate(id, t) {
     loadTemplates();
   } catch (err) {
     showToast(err.message || '删除失败', 'error');
+  }
+}
+
+function bindExecute() {
+  document.querySelectorAll('.execute-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.dataset.id;
+      const t = e.target.dataset.type;
+      await executeTemplate(id, t, e.target);
+    });
+  });
+}
+
+async function executeTemplate(id, t, btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '创建中...';
+  try {
+    const url = t === 'metrics_analysis' ? `/api/metrics-analysis/templates/${id}/execute` : `/api/templates/${id}/execute`;
+    const res = await fetch(url, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '创建任务失败');
+    showToast('任务已创建，正在跳转...', 'success');
+    setTimeout(() => {
+      window.location.href = '/jobs';
+    }, 800);
+  } catch (err) {
+    showToast(err.message || '创建任务失败', 'error');
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 

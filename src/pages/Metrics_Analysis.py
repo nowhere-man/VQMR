@@ -141,6 +141,16 @@ def _build_bd_rows(df: pd.DataFrame) -> Tuple[List[Dict[str, Any]], List[Dict[st
 
 
 st.set_page_config(page_title="Metrics分析", page_icon="📊", layout="wide")
+
+# 隐藏默认的 pages 导航，只显示 Contents 目录
+st.markdown("""
+<style>
+    [data-testid="stSidebarNav"] {
+        display: none;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.markdown("<h1 style='text-align:center;'>📊 Metrics分析</h1>", unsafe_allow_html=True)
 
 jobs = _list_metrics_jobs()
