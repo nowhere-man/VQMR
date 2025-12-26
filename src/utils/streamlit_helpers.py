@@ -368,6 +368,265 @@ def color_positive_red(val):
     return ""
 
 
+def _summary_stats(series: "pd.Series") -> Tuple[Any, Any, Any]:
+    clean = series.dropna()
+    if clean.empty:
+        return pd.NA, pd.NA, pd.NA
+    return clean.mean(), clean.max(), clean.min()
+
+
+def _build_sign_styles(
+    df: "pd.DataFrame",
+    default_rule: Tuple[str, str],
+    row_rules: Optional[Dict[str, Tuple[str, str]]] = None,
+) -> "pd.DataFrame":
+    rules = row_rules or {}
+    styles = pd.DataFrame("", index=df.index, columns=df.columns)
+    for row_label in df.index:
+        pos_color, neg_color = rules.get(row_label, default_rule)
+        for col in df.columns:
+            value = df.at[row_label, col]
+            if pd.isna(value) or not isinstance(value, (int, float)):
+                styles.at[row_label, col] = "color: #94a3b8;"
+            elif value > 0:
+                styles.at[row_label, col] = f"color: {pos_color};"
+            elif value < 0:
+                styles.at[row_label, col] = f"color: {neg_color};"
+            else:
+                styles.at[row_label, col] = ""
+    return styles
+
+
+def _render_overall_table(
+    title: str,
+    df: "pd.DataFrame",
+    fmt: str,
+    suffix: str,
+    default_rule: Tuple[str, str],
+    row_rules: Optional[Dict[str, Tuple[str, str]]] = None,
+    empty_text: Optional[str] = None,
+) -> None:
+    if df.empty:
+        st.info(empty_text or "暂无数据。")
+        return
+
+    styles = _build_sign_styles(df, default_rule, row_rules)
+
+    def _format_value(value: Any) -> str:
+        if pd.isna(value) or not isinstance(value, (int, float)):
+            return "--"
+        return f"{format(value, fmt)}{suffix}"
+
+    styler = (
+        df.style.apply(lambda _: styles, axis=None)
+        .format(_format_value)
+        .set_properties(**{"text-align": "right", "font-weight": "600"})
+        .set_table_styles([{"selector": "th", "props": [("text-align", "right")]}])
+    )
+
+    st.markdown(f"**{title}**")
+    st.dataframe(styler, use_container_width=True)
+
+
+def render_overall_section(
+    df_metrics: "pd.DataFrame",
+    df_perf: "pd.DataFrame",
+    bd_list: List[Dict[str, Any]],
+    base_label: str = "Baseline",
+    exp_label: str = "Test",
+) -> None:
+    """
+    渲染 Overall 汇总部分
+
+    Args:
+        df_metrics: 指标数据 DataFrame，包含 Video, Side, RC, Point, Bitrate_kbps, PSNR, SSIM, VMAF, VMAF-NEG 列
+        df_perf: 性能数据 DataFrame，包含 Video, Side, Point, FPS, CPU Avg(%) 列
+        bd_list: BD-Rate/BD-Metrics 数据列表
+        base_label: 基准组标签
+        exp_label: 实验组标签
+    """
+    if df_metrics.empty:
+        st.info("暂无可用的指标数据。")
+        return
+
+    # 获取所有点位
+    point_list = sorted(df_metrics["Point"].dropna().unique().tolist())
+
+    if not point_list:
+        st.info("暂无可用的码率点位数据。")
+        return
+
+    # ===== BD-Rate / BD-Metrics =====
+    if bd_list:
+        df_bd = pd.DataFrame(bd_list)
+        bd_psnr_avg, bd_psnr_max, bd_psnr_min = _summary_stats(df_bd["bd_rate_psnr"])
+        bd_ssim_avg, bd_ssim_max, bd_ssim_min = _summary_stats(df_bd["bd_rate_ssim"])
+        bd_vmaf_avg, bd_vmaf_max, bd_vmaf_min = _summary_stats(df_bd["bd_rate_vmaf"])
+        bd_vmaf_neg_avg, bd_vmaf_neg_max, bd_vmaf_neg_min = _summary_stats(df_bd["bd_rate_vmaf_neg"])
+
+        bd_rate_df = pd.DataFrame(
+            {
+                "平均": [bd_psnr_avg, bd_ssim_avg, bd_vmaf_avg, bd_vmaf_neg_avg],
+                "最大": [bd_psnr_max, bd_ssim_max, bd_vmaf_max, bd_vmaf_neg_max],
+                "最小": [bd_psnr_min, bd_ssim_min, bd_vmaf_min, bd_vmaf_neg_min],
+            },
+            index=["PSNR", "SSIM", "VMAF", "VMAF-NEG"],
+        )
+
+        bd_m_psnr_avg, bd_m_psnr_max, bd_m_psnr_min = _summary_stats(df_bd["bd_psnr"])
+        bd_m_ssim_avg, bd_m_ssim_max, bd_m_ssim_min = _summary_stats(df_bd["bd_ssim"])
+        bd_m_vmaf_avg, bd_m_vmaf_max, bd_m_vmaf_min = _summary_stats(df_bd["bd_vmaf"])
+        bd_m_vmaf_neg_avg, bd_m_vmaf_neg_max, bd_m_vmaf_neg_min = _summary_stats(df_bd["bd_vmaf_neg"])
+
+        bd_metrics_df = pd.DataFrame(
+            {
+                "平均": [bd_m_psnr_avg, bd_m_ssim_avg, bd_m_vmaf_avg, bd_m_vmaf_neg_avg],
+                "最大": [bd_m_psnr_max, bd_m_ssim_max, bd_m_vmaf_max, bd_m_vmaf_neg_max],
+                "最小": [bd_m_psnr_min, bd_m_ssim_min, bd_m_vmaf_min, bd_m_vmaf_neg_min],
+            },
+            index=["PSNR", "SSIM", "VMAF", "VMAF-NEG"],
+        )
+
+        bd_rate_col, bd_metrics_col = st.columns(2)
+        with bd_rate_col:
+            _render_overall_table(
+                "BD-Rate",
+                bd_rate_df,
+                "+.2f",
+                "%",
+                ("red", "green"),
+                empty_text="暂无 BD-Rate 数据。",
+            )
+        with bd_metrics_col:
+            _render_overall_table(
+                "BD-Metrics",
+                bd_metrics_df,
+                "+.4f",
+                "",
+                ("green", "red"),
+                empty_text="暂无 BD-Metrics 数据。",
+            )
+    else:
+        st.info("暂无 BD-Rate / BD-Metrics 数据。")
+
+    point_label_col, point_select_col, point_spacer_col = st.columns([1, 2, 6])
+    with point_label_col:
+        st.markdown("**码率点位**")
+    with point_select_col:
+        selected_point = st.selectbox(
+            "选择码率点位",
+            point_list,
+            key="overall_point",
+            label_visibility="collapsed",
+        )
+    point_spacer_col.empty()
+
+    # 筛选选中点位的数据
+    point_df = df_metrics[df_metrics["Point"] == selected_point]
+    base_point = point_df[point_df["Side"] == base_label]
+    exp_point = point_df[point_df["Side"] == exp_label]
+
+    # 合并 baseline 和 test
+    merged_point = base_point.merge(
+        exp_point,
+        on=["Video", "RC", "Point"],
+        suffixes=("_base", "_exp"),
+    )
+
+    if merged_point.empty:
+        st.warning("选中点位没有可对比的数据。")
+        return
+
+    performance_df = pd.DataFrame()
+
+    psnr_diff = merged_point["PSNR_exp"] - merged_point["PSNR_base"]
+    psnr_avg, psnr_max, psnr_min = _summary_stats(psnr_diff)
+
+    ssim_diff = merged_point["SSIM_exp"] - merged_point["SSIM_base"]
+    ssim_avg, ssim_max, ssim_min = _summary_stats(ssim_diff)
+
+    vmaf_diff = merged_point["VMAF_exp"] - merged_point["VMAF_base"]
+    vmaf_avg, vmaf_max, vmaf_min = _summary_stats(vmaf_diff)
+
+    vmaf_neg_diff = merged_point["VMAF-NEG_exp"] - merged_point["VMAF-NEG_base"]
+    vmaf_neg_avg, vmaf_neg_max, vmaf_neg_min = _summary_stats(vmaf_neg_diff)
+
+    metrics_df = pd.DataFrame(
+        {
+            "平均": [psnr_avg, ssim_avg, vmaf_avg, vmaf_neg_avg],
+            "最大": [psnr_max, ssim_max, vmaf_max, vmaf_neg_max],
+            "最小": [psnr_min, ssim_min, vmaf_min, vmaf_neg_min],
+        },
+        index=["PSNR", "SSIM", "VMAF", "VMAF-NEG"],
+    )
+
+    if not df_perf.empty:
+        perf_point_df = df_perf[df_perf["Point"] == selected_point]
+        base_perf_point = perf_point_df[perf_point_df["Side"] == base_label]
+        exp_perf_point = perf_point_df[perf_point_df["Side"] == exp_label]
+        merged_perf_point = base_perf_point.merge(
+            exp_perf_point,
+            on=["Video", "Point"],
+            suffixes=("_base", "_exp"),
+        )
+
+        if not merged_perf_point.empty:
+            cpu_diff_pct_series = ((merged_perf_point["CPU Avg(%)_exp"] - merged_perf_point["CPU Avg(%)_base"]) / merged_perf_point["CPU Avg(%)_base"].replace(0, pd.NA)) * 100
+            cpu_avg_pct, cpu_max_pct, cpu_min_pct = _summary_stats(cpu_diff_pct_series)
+
+            fps_diff_pct_series = ((merged_perf_point["FPS_exp"] - merged_perf_point["FPS_base"]) / merged_perf_point["FPS_base"].replace(0, pd.NA)) * 100
+            fps_avg_pct, fps_max_pct, fps_min_pct = _summary_stats(fps_diff_pct_series)
+
+            performance_df = pd.DataFrame(
+                {
+                    "平均": [cpu_avg_pct, fps_avg_pct],
+                    "最大": [cpu_max_pct, fps_max_pct],
+                    "最小": [cpu_min_pct, fps_min_pct],
+                },
+                index=["CPU Usage", "FPS"],
+            )
+
+    bitrate_diff_pct_series = ((merged_point["Bitrate_kbps_exp"] - merged_point["Bitrate_kbps_base"]) / merged_point["Bitrate_kbps_base"].replace(0, pd.NA)) * 100
+    bitrate_avg, bitrate_max, bitrate_min = _summary_stats(bitrate_diff_pct_series)
+    bitrate_df = pd.DataFrame(
+        {
+            "平均": [bitrate_avg],
+            "最大": [bitrate_max],
+            "最小": [bitrate_min],
+        },
+        index=["Bitrate"],
+    )
+
+    metrics_col, perf_bitrate_col = st.columns(2)
+    with metrics_col:
+        _render_overall_table(
+            "Metrics",
+            metrics_df,
+            "+.4f",
+            "",
+            ("green", "red"),
+            empty_text="暂无 Metrics 数据。",
+        )
+    with perf_bitrate_col:
+        _render_overall_table(
+            "Performance",
+            performance_df,
+            "+.2f",
+            "%",
+            ("green", "red"),
+            row_rules={"CPU Usage": ("red", "green")},
+            empty_text="暂无 Performance 数据。",
+        )
+        _render_overall_table(
+            "Bitrate",
+            bitrate_df,
+            "+.2f",
+            "%",
+            ("red", "green"),
+            empty_text="暂无 Bitrate 数据。",
+        )
+
+
 def format_env_info(env: Dict[str, Any]) -> str:
     """
     格式化环境信息为 Markdown 列表

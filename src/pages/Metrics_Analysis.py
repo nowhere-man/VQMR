@@ -29,6 +29,7 @@ from src.utils.streamlit_helpers import (
     color_positive_green,
     color_positive_red,
     format_env_info,
+    render_overall_section,
 )
 
 
@@ -190,6 +191,7 @@ df = df.sort_values(by=["Video", "RC", "Point", "Side"])
 with st.sidebar:
     st.markdown("### 📑 Contents")
     st.markdown("""
+- [Overall](#overall)
 - [Metrics](#metrics)
   - [A vs B 对比](#a-vs-b-对比)
 - [BD-Rate](#bd-rate)
@@ -210,6 +212,43 @@ html {
 }
 </style>
 """, unsafe_allow_html=True)
+
+# 构建 BD-Rate/BD-Metrics 数据
+base_df = df[df["Side"] == "A"]
+exp_df = df[df["Side"] == "B"]
+merged = base_df.merge(exp_df, on=["Video", "RC", "Point"], suffixes=("_base", "_exp"))
+bd_rate_rows, bd_metric_rows = _build_bd_rows(df)
+
+# 转换为 render_overall_section 需要的格式
+bd_list_for_overall = []
+if bd_rate_rows and bd_metric_rows:
+    for i, rate_row in enumerate(bd_rate_rows):
+        metric_row = bd_metric_rows[i] if i < len(bd_metric_rows) else {}
+        bd_list_for_overall.append({
+            "source": rate_row.get("Video"),
+            "bd_rate_psnr": rate_row.get("BD-Rate PSNR (%)"),
+            "bd_rate_ssim": rate_row.get("BD-Rate SSIM (%)"),
+            "bd_rate_vmaf": rate_row.get("BD-Rate VMAF (%)"),
+            "bd_rate_vmaf_neg": rate_row.get("BD-Rate VMAF-NEG (%)"),
+            "bd_psnr": metric_row.get("BD PSNR"),
+            "bd_ssim": metric_row.get("BD SSIM"),
+            "bd_vmaf": metric_row.get("BD VMAF"),
+            "bd_vmaf_neg": metric_row.get("BD VMAF-NEG"),
+        })
+
+# ========== Overall ==========
+st.header("Overall", anchor="overall")
+
+# 构建性能数据 DataFrame
+df_perf_overall = pd.DataFrame(perf_rows) if perf_rows else pd.DataFrame()
+
+render_overall_section(
+    df_metrics=df,
+    df_perf=df_perf_overall,
+    bd_list=bd_list_for_overall,
+    base_label="A",
+    exp_label="B",
+)
 
 st.header("Metrics", anchor="metrics")
 
