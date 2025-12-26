@@ -38,7 +38,7 @@
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">源视频目录<span class="text-red-500">*</span></label>
         <input id="common_source_dir" class="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-blue-500" required />
-        <p class="text-xs text-gray-500 mt-1">Baseline 和 Experimental 共用此源视频目录。YUV文件名格式需满足：stream_wxh_fps.yuv。</p>
+        <p class="text-xs text-gray-500 mt-1">Baseline 和 Test 共用此源视频目录。YUV文件名格式需满足：stream_wxh_fps.yuv。</p>
       </div>
     </div>
 
@@ -103,10 +103,10 @@
       </div>
     </div>
 
-    <!-- Experimental -->
+    <!-- Test -->
     <div id="exp_section" class="space-y-4 border-t pt-6">
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-gray-900">Experimental 实验组</h2>
+        <h2 class="text-lg font-semibold text-gray-900">Test 实验组</h2>
         <label class="flex items-center text-sm text-gray-700 space-x-2">
           <input type="checkbox" id="exp_skip" class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
           <span>跳过视频编码</span>
@@ -255,7 +255,7 @@ async function loadTemplate() {
       data = await metricsRes.json();
       data.template_type = 'metrics_analysis';
       data.baseline = data.config;
-      data.experimental = null;
+      data.test = null;
     }
     templateTypeSelect.value = data.template_type || 'comparison';
     applyTypeUI(templateTypeSelect.value);
@@ -273,7 +273,7 @@ async function loadTemplate() {
       $(prefix + '_bitrate_points').value = (side.bitrate_points || []).join(',');
     };
     fill('baseline', data.baseline);
-    fill('exp', data.experimental);
+    fill('exp', data.test);
     // 对比模式下，填充公共源视频目录
     if (data.template_type === 'comparison' && data.baseline?.source_dir) {
       $('common_source_dir').value = data.baseline.source_dir || '';
@@ -315,7 +315,7 @@ form.addEventListener('submit', async (e) => {
     name: $('name').value.trim(),
     description: $('description').value.trim() || null,
     baseline: collectSide('baseline'),
-    experimental: collectSide('exp'),
+    test: collectSide('exp'),
   };
   const type = templateTypeSelect.value;
   const method = tmplId ? 'PUT' : 'POST';
@@ -324,7 +324,7 @@ form.addEventListener('submit', async (e) => {
     url = tmplId ? `/api/metrics-analysis/templates/${tmplId}` : '/api/metrics-analysis/templates';
     payload.config = payload.baseline;
     delete payload.baseline;
-    delete payload.experimental;
+    delete payload.test;
   } else {
     url = tmplId ? `/api/templates/${tmplId}` : '/api/templates';
   }

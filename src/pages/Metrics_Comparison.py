@@ -1,5 +1,5 @@
 """
-模板 Metrics对比 报告页面（Baseline / Experimental）
+模板 Metrics对比 报告页面（Baseline / Test）
 
 通过 `?template_job_id=<job_id>` 打开对应任务的报告。
 """
@@ -125,7 +125,7 @@ st.header("Metrics", anchor="metrics")
 rows = []
 for entry in entries:
     video = entry.get("source")
-    for side_key, side_name in (("baseline", "Baseline"), ("experimental", "Experimental")):
+    for side_key, side_name in (("baseline", "Baseline"), ("test", "Test")):
         side = (entry.get(side_key) or {})
         for item in side.get("encoded", []) or []:
             rc, val = _parse_point(item.get("label", ""))
@@ -167,7 +167,7 @@ with col_select:
 # 筛选数据并绘制 RD 曲线
 video_df = df_metrics[df_metrics["Video"] == selected_video]
 baseline_data = video_df[video_df["Side"] == "Baseline"].sort_values("Bitrate_kbps")
-exp_data = video_df[video_df["Side"] == "Experimental"].sort_values("Bitrate_kbps")
+test_data = video_df[video_df["Side"] == "Test"].sort_values("Bitrate_kbps")
 
 fig_rd = go.Figure()
 fig_rd.add_trace(
@@ -182,10 +182,10 @@ fig_rd.add_trace(
 )
 fig_rd.add_trace(
     go.Scatter(
-        x=exp_data["Bitrate_kbps"],
-        y=exp_data[selected_metric],
+        x=test_data["Bitrate_kbps"],
+        y=test_data[selected_metric],
         mode="lines+markers",
-        name="Experimental",
+        name="Test",
         marker=dict(size=10),
         line=dict(width=2, shape="spline", smoothing=1.3),
     )
@@ -200,20 +200,20 @@ fig_rd.update_layout(
 with col_chart:
     st.plotly_chart(fig_rd, use_container_width=True)
 
-# Diff 对比表（Baseline vs Experimental）
+# Diff 对比表（Baseline vs Test）
 base_df = df_metrics[df_metrics["Side"] == "Baseline"]
-exp_df = df_metrics[df_metrics["Side"] == "Experimental"]
+test_df = df_metrics[df_metrics["Side"] == "Test"]
 merged = base_df.merge(
-    exp_df,
+    test_df,
     on=["Video", "RC", "Point"],
-    suffixes=("_base", "_exp"),
+    suffixes=("_base", "_test"),
 )
 if not merged.empty:
-    merged["Bitrate Δ%"] = ((merged["Bitrate_kbps_exp"] - merged["Bitrate_kbps_base"]) / merged["Bitrate_kbps_base"].replace(0, pd.NA)) * 100
-    merged["PSNR Δ"] = merged["PSNR_exp"] - merged["PSNR_base"]
-    merged["SSIM Δ"] = merged["SSIM_exp"] - merged["SSIM_base"]
-    merged["VMAF Δ"] = merged["VMAF_exp"] - merged["VMAF_base"]
-    merged["VMAF-NEG Δ"] = merged["VMAF-NEG_exp"] - merged["VMAF-NEG_base"]
+    merged["Bitrate Δ%"] = ((merged["Bitrate_kbps_test"] - merged["Bitrate_kbps_base"]) / merged["Bitrate_kbps_base"].replace(0, pd.NA)) * 100
+    merged["PSNR Δ"] = merged["PSNR_test"] - merged["PSNR_base"]
+    merged["SSIM Δ"] = merged["SSIM_test"] - merged["SSIM_base"]
+    merged["VMAF Δ"] = merged["VMAF_test"] - merged["VMAF_base"]
+    merged["VMAF-NEG Δ"] = merged["VMAF-NEG_test"] - merged["VMAF-NEG_base"]
 
     diff_df = merged[
         ["Video", "RC", "Point", "Bitrate Δ%", "PSNR Δ", "SSIM Δ", "VMAF Δ", "VMAF-NEG Δ"]
@@ -452,9 +452,9 @@ if video_point_options:
     with col_opt2:
         bin_seconds = st.slider("聚合间隔 (秒)", min_value=0.1, max_value=5.0, value=1.0, step=0.1, key="br_bin")
 
-    # 找到对应的 baseline 和 experimental 数据
+    # 找到对应的 baseline 和 test 数据
     baseline_bitrate = None
-    exp_bitrate = None
+    test_bitrate = None
     ref_fps = 30.0
 
     for entry in entries:
@@ -468,14 +468,14 @@ if video_point_options:
                     baseline_bitrate = item.get("bitrate") or {}
                     break
 
-            for item in (entry.get("experimental") or {}).get("encoded") or []:
+            for item in (entry.get("test") or {}).get("encoded") or []:
                 rc, point = _parse_point(item.get("label", ""))
                 if point == selected_point_br:
-                    exp_bitrate = item.get("bitrate") or {}
+                    test_bitrate = item.get("bitrate") or {}
                     break
             break
 
-    if baseline_bitrate and exp_bitrate:
+    if baseline_bitrate and test_bitrate:
         def _aggregate_bitrate(bitrate_data, bin_sec):
             ts = bitrate_data.get("frame_timestamps", []) or []
             sizes = bitrate_data.get("frame_sizes", []) or []
@@ -492,16 +492,16 @@ if video_point_options:
             return x_times, y_kbps
 
         base_x, base_y = _aggregate_bitrate(baseline_bitrate, bin_seconds)
-        exp_x, exp_y = _aggregate_bitrate(exp_bitrate, bin_seconds)
+        test_x, test_y = _aggregate_bitrate(test_bitrate, bin_seconds)
 
         fig_br = go.Figure()
         if chart_type == "柱状图":
             fig_br.add_trace(go.Bar(x=base_x, y=base_y, name="Baseline", opacity=0.7))
-            fig_br.add_trace(go.Bar(x=exp_x, y=exp_y, name="Experimental", opacity=0.7))
+            fig_br.add_trace(go.Bar(x=test_x, y=test_y, name="Test", opacity=0.7))
             fig_br.update_layout(barmode="group")
         else:
             fig_br.add_trace(go.Scatter(x=base_x, y=base_y, mode="lines+markers", name="Baseline"))
-            fig_br.add_trace(go.Scatter(x=exp_x, y=exp_y, mode="lines+markers", name="Experimental"))
+            fig_br.add_trace(go.Scatter(x=test_x, y=test_y, mode="lines+markers", name="Test"))
 
         fig_br.update_layout(
             title=f"码率对比 - {selected_video_br} ({selected_point_br})",
@@ -514,7 +514,7 @@ if video_point_options:
 
         # 显示平均码率对比
         base_avg = (baseline_bitrate.get("avg_bitrate_bps") or sum(baseline_bitrate.get("frame_sizes", [])) * 8 / (len(baseline_bitrate.get("frame_timestamps", [])) / ref_fps if baseline_bitrate.get("frame_timestamps") else 1)) / 1000
-        exp_avg = (exp_bitrate.get("avg_bitrate_bps") or sum(exp_bitrate.get("frame_sizes", [])) * 8 / (len(exp_bitrate.get("frame_timestamps", [])) / ref_fps if exp_bitrate.get("frame_timestamps") else 1)) / 1000
+        test_avg = (test_bitrate.get("avg_bitrate_bps") or sum(test_bitrate.get("frame_sizes", [])) * 8 / (len(test_bitrate.get("frame_timestamps", [])) / ref_fps if test_bitrate.get("frame_timestamps") else 1)) / 1000
 
         # 从 entries 中获取 avg_bitrate_bps
         for entry in entries:
@@ -524,17 +524,17 @@ if video_point_options:
                     if point == selected_point_br:
                         base_avg = item.get("avg_bitrate_bps", 0) / 1000
                         break
-                for item in (entry.get("experimental") or {}).get("encoded") or []:
+                for item in (entry.get("test") or {}).get("encoded") or []:
                     rc, point = _parse_point(item.get("label", ""))
                     if point == selected_point_br:
-                        exp_avg = item.get("avg_bitrate_bps", 0) / 1000
+                        test_avg = item.get("avg_bitrate_bps", 0) / 1000
                         break
                 break
 
         col_m1, col_m2, col_m3 = st.columns(3)
         col_m1.metric("Baseline 平均码率", f"{base_avg:.2f} kbps")
-        col_m2.metric("Experimental 平均码率", f"{exp_avg:.2f} kbps")
-        diff_pct = ((exp_avg - base_avg) / base_avg * 100) if base_avg > 0 else 0
+        col_m2.metric("Test 平均码率", f"{test_avg:.2f} kbps")
+        diff_pct = ((test_avg - base_avg) / base_avg * 100) if base_avg > 0 else 0
         col_m3.metric("码率差异", f"{diff_pct:+.2f}%")
     else:
         st.warning("未找到对应的码率数据。请确保报告包含帧级码率信息。")
@@ -550,7 +550,7 @@ perf_rows = []
 perf_detail_rows = []
 for entry in entries:
     video = entry.get("source")
-    for side_key, side_name in (("baseline", "Baseline"), ("experimental", "Experimental")):
+    for side_key, side_name in (("baseline", "Baseline"), ("test", "Test")):
         side = (entry.get(side_key) or {})
         for item in side.get("encoded", []) or []:
             rc, point = _parse_point(item.get("label", ""))
@@ -582,23 +582,23 @@ if perf_rows:
     # 1. 汇总Diff表格
     st.subheader("Delta", anchor="perf-diff")
     base_perf = df_perf[df_perf["Side"] == "Baseline"]
-    exp_perf = df_perf[df_perf["Side"] == "Experimental"]
+    test_perf = df_perf[df_perf["Side"] == "Test"]
     merged_perf = base_perf.merge(
-        exp_perf,
+        test_perf,
         on=["Video", "Point"],
-        suffixes=("_base", "_exp"),
+        suffixes=("_base", "_test"),
     )
     if not merged_perf.empty:
-        merged_perf["Δ FPS"] = merged_perf["FPS_exp"] - merged_perf["FPS_base"]
-        merged_perf["Δ CPU Avg(%)"] = merged_perf["CPU Avg(%)_exp"] - merged_perf["CPU Avg(%)_base"]
+        merged_perf["Δ FPS"] = merged_perf["FPS_test"] - merged_perf["FPS_base"]
+        merged_perf["Δ CPU Avg(%)"] = merged_perf["CPU Avg(%)_test"] - merged_perf["CPU Avg(%)_base"]
 
         diff_perf_df = merged_perf[
-            ["Video", "Point", "FPS_base", "FPS_exp", "Δ FPS", "CPU Avg(%)_base", "CPU Avg(%)_exp", "Δ CPU Avg(%)"]
+            ["Video", "Point", "FPS_base", "FPS_test", "Δ FPS", "CPU Avg(%)_base", "CPU Avg(%)_test", "Δ CPU Avg(%)"]
         ].rename(columns={
             "FPS_base": "Baseline FPS",
-            "FPS_exp": "Exp FPS",
+            "FPS_test": "Test FPS",
             "CPU Avg(%)_base": "Baseline CPU(%)",
-            "CPU Avg(%)_exp": "Exp CPU(%)",
+            "CPU Avg(%)_test": "Test CPU(%)",
         }).sort_values(by=["Video", "Point"]).reset_index(drop=True)
 
         # 合并同一视频的名称
@@ -621,10 +621,10 @@ if perf_rows:
         # 格式化精度：FPS 和 CPU 都保留2位小数
         perf_format_dict = {
             "Baseline FPS": "{:.2f}",
-            "Exp FPS": "{:.2f}",
+            "Test FPS": "{:.2f}",
             "Δ FPS": "{:.2f}",
             "Baseline CPU(%)": "{:.2f}",
-            "Exp CPU(%)": "{:.2f}",
+            "Test CPU(%)": "{:.2f}",
             "Δ CPU Avg(%)": "{:.2f}",
         }
         styled_perf = diff_perf_df.style.applymap(_color_perf_diff, subset=["Δ FPS", "Δ CPU Avg(%)"]).format(perf_format_dict, na_rep="-")
@@ -647,22 +647,22 @@ if perf_rows:
 
     # 获取对应的CPU采样数据
     base_samples = []
-    exp_samples = []
+    test_samples = []
     for _, row in df_perf.iterrows():
         if row["Video"] == selected_video_perf and row["Point"] == selected_point_perf:
             if row["Side"] == "Baseline":
                 base_samples = row.get("cpu_samples", []) or []
             else:
-                exp_samples = row.get("cpu_samples", []) or []
+                test_samples = row.get("cpu_samples", []) or []
 
-    if base_samples or exp_samples:
+    if base_samples or test_samples:
         fig_cpu = create_cpu_chart(
             base_samples=base_samples,
-            exp_samples=exp_samples,
+            exp_samples=test_samples,
             agg_interval=agg_interval,
             title=f"CPU占用率 - {selected_video_perf} ({selected_point_perf})",
             base_label="Baseline",
-            exp_label="Experimental",
+            exp_label="Test",
         )
         st.plotly_chart(fig_cpu, use_container_width=True)
     else:
@@ -770,7 +770,7 @@ def _format_env_info(env: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 # 使用 baseline_environment（任务开始时的环境状态）
-env = report.get("baseline_environment") or report.get("experimental_environment") or {}
+env = report.get("baseline_environment") or report.get("test_environment") or {}
 
 if env:
     st.markdown(_format_env_info(env))

@@ -1,5 +1,5 @@
 """
-模板执行与指标计算（Baseline / Experimental）
+模板执行与指标计算（Baseline / Test）
 
 尽量复用现有码流分析逻辑，允许破坏式实现。
 """
@@ -344,7 +344,7 @@ async def _encode_side(
     job=None,
 ) -> Tuple[Dict[str, List[Path]], Dict[str, List[PerformanceData]]]:
     """
-    编码一侧（Baseline 或 Experimental）的所有源文件
+    编码一侧（Baseline 或 Test）的所有源文件
     返回: (outputs, performance_data)
         - outputs: {source_stem: [encoded_path, ...]}
         - performance_data: {source_stem: [PerformanceData, ...]}
@@ -442,22 +442,22 @@ async def run_template(
         except Exception:
             pass
     # 校验码控/点位一致性
-    if template.metadata.baseline.rate_control != template.metadata.experimental.rate_control:
-        raise ValueError("Baseline 与 Experimental 的码控方式不一致")
-    if template.metadata.baseline.encoder_type and template.metadata.experimental.encoder_type:
-        if template.metadata.baseline.encoder_type != template.metadata.experimental.encoder_type:
-            raise ValueError("Baseline 与 Experimental 的编码器类型不一致")
-    if sorted(template.metadata.baseline.bitrate_points or []) != sorted(template.metadata.experimental.bitrate_points or []):
-        raise ValueError("Baseline 与 Experimental 的码率点位不一致")
+    if template.metadata.baseline.rate_control != template.metadata.test.rate_control:
+        raise ValueError("Baseline 与 Test 的码控方式不一致")
+    if template.metadata.baseline.encoder_type and template.metadata.test.encoder_type:
+        if template.metadata.baseline.encoder_type != template.metadata.test.encoder_type:
+            raise ValueError("Baseline 与 Test 的编码器类型不一致")
+    if sorted(template.metadata.baseline.bitrate_points or []) != sorted(template.metadata.test.bitrate_points or []):
+        raise ValueError("Baseline 与 Test 的码率点位不一致")
     # 收集源并按 stem 对齐
     baseline_sources = await _collect_sources(template.metadata.baseline.source_dir)
-    exp_sources = await _collect_sources(template.metadata.experimental.source_dir)
+    test_sources = await _collect_sources(template.metadata.test.source_dir)
     base_map = {p.path.stem: p for p in baseline_sources}
-    exp_map = {p.path.stem: p for p in exp_sources}
-    if set(base_map.keys()) != set(exp_map.keys()):
-        missing_a = set(base_map.keys()) - set(exp_map.keys())
-        missing_b = set(exp_map.keys()) - set(base_map.keys())
-        raise ValueError(f"源文件不匹配: baseline 多 {missing_a}，experimental 多 {missing_b}")
+    test_map = {p.path.stem: p for p in test_sources}
+    if set(base_map.keys()) != set(test_map.keys()):
+        missing_a = set(base_map.keys()) - set(test_map.keys())
+        missing_b = set(test_map.keys()) - set(base_map.keys())
+        raise ValueError(f"源文件不匹配: baseline 多 {missing_a}，test 多 {missing_b}")
     ordered_sources = [base_map[k] for k in sorted(base_map.keys())]
 
     # Baseline 编码/校验
@@ -478,13 +478,13 @@ async def run_template(
     template.metadata.baseline_computed = True
     template.metadata.baseline_fingerprint = _fingerprint(template.metadata.baseline)
 
-    # Experimental 编码/校验
-    # 收集 Experimental 环境信息（编码前）
-    experimental_env = _env_info()
+    # Test 编码/校验
+    # 收集 Test 环境信息（编码前）
+    test_env = _env_info()
 
-    exp_outputs, exp_perfs = await _encode_side(
-        template.metadata.experimental,
-        [exp_map[s.path.stem] for s in ordered_sources],
+    test_outputs, test_perfs = await _encode_side(
+        template.metadata.test,
+        [test_map[s.path.stem] for s in ordered_sources],
         recompute=True,
         job=job,
     )
@@ -499,9 +499,9 @@ async def run_template(
     for src in ordered_sources:
         key = src.path.stem
         baseline_paths = baseline_outputs.get(key, [])
-        exp_paths = exp_outputs.get(key, [])
+        test_paths = test_outputs.get(key, [])
 
-        if not baseline_paths or not exp_paths:
+        if not baseline_paths or not test_paths:
             raise ValueError(f"缺少码流: {src.path.name}")
 
         analysis_dir = analysis_root / src.path.stem
@@ -518,10 +518,10 @@ async def run_template(
             add_command_callback=_add_cmd,
             update_status_callback=_update_cmd,
         )
-        exp_report, exp_summary = await build_bitstream_report(
+        test_report, test_summary = await build_bitstream_report(
             reference_path=src.path,
-            encoded_paths=exp_paths,
-            analysis_dir=analysis_dir / "experimental",
+            encoded_paths=test_paths,
+            analysis_dir=analysis_dir / "test",
             raw_width=src.width if src.is_yuv else None,
             raw_height=src.height if src.is_yuv else None,
             raw_fps=src.fps if src.is_yuv else None,
@@ -553,11 +553,11 @@ async def run_template(
 
         # encoded summaries are in report["encoded"]
         base_enc = base_report.get("encoded") or []
-        exp_enc = exp_report.get("encoded") or []
+        test_enc = test_report.get("encoded") or []
 
         def _pair_curves(key):
             pts_a = _collect(base_enc, key)
-            pts_b = _collect(exp_enc, key)
+            pts_b = _collect(test_enc, key)
             if len(pts_a) < 4 or len(pts_b) < 4:
                 return None
             m1, r1 = zip(*sorted(pts_a, key=lambda x: x[0]))
@@ -567,7 +567,7 @@ async def run_template(
         def _pair_metrics(key):
             pts_a = []
             pts_b = []
-            for series, target in ((base_enc, pts_a), (exp_enc, pts_b)):
+            for series, target in ((base_enc, pts_a), (test_enc, pts_b)):
                 for item in series:
                     # avg_bitrate_bps 可能在 item["bitrate"]["avg_bitrate_bps"] 或直接在 item 上
                     bitrate = item.get("avg_bitrate_bps") or (item.get("bitrate") or {}).get("avg_bitrate_bps")
@@ -606,7 +606,7 @@ async def run_template(
 
         # 将性能数据添加到 summary 的 encoded 列表中
         base_perf_list = baseline_perfs.get(key, [])
-        exp_perf_list = exp_perfs.get(key, [])
+        test_perf_list = test_perfs.get(key, [])
 
         # 为 baseline encoded 添加性能数据
         if base_summary and "encoded" in base_summary:
@@ -616,11 +616,11 @@ async def run_template(
                     if perf_dict:  # 只有有数据时才添加
                         enc_item["performance"] = perf_dict
 
-        # 为 experimental encoded 添加性能数据
-        if exp_summary and "encoded" in exp_summary:
-            for i, enc_item in enumerate(exp_summary["encoded"]):
-                if i < len(exp_perf_list):
-                    perf_dict = exp_perf_list[i].to_dict()
+        # 为 test encoded 添加性能数据
+        if test_summary and "encoded" in test_summary:
+            for i, enc_item in enumerate(test_summary["encoded"]):
+                if i < len(test_perf_list):
+                    perf_dict = test_perf_list[i].to_dict()
                     if perf_dict:  # 只有有数据时才添加
                         enc_item["performance"] = perf_dict
 
@@ -628,7 +628,7 @@ async def run_template(
             {
                 "source": src.path.name,
                 "baseline": base_summary,
-                "experimental": exp_summary,
+                "test": test_summary,
             }
         )
 
@@ -644,18 +644,18 @@ async def run_template(
             "encoder_type": template.metadata.baseline.encoder_type.value if template.metadata.baseline.encoder_type else None,
             "encoder_params": template.metadata.baseline.encoder_params,
         },
-        "experimental": {
-            "source_dir": template.metadata.experimental.source_dir,
-            "bitstream_dir": template.metadata.experimental.bitstream_dir,
-            "encoder_type": template.metadata.experimental.encoder_type.value if template.metadata.experimental.encoder_type else None,
-            "encoder_params": template.metadata.experimental.encoder_params,
+        "test": {
+            "source_dir": template.metadata.test.source_dir,
+            "bitstream_dir": template.metadata.test.bitstream_dir,
+            "encoder_type": template.metadata.test.encoder_type.value if template.metadata.test.encoder_type else None,
+            "encoder_params": template.metadata.test.encoder_params,
         },
         "baseline_computed": template.metadata.baseline_computed,
         "baseline_fingerprint": _fingerprint(template.metadata.baseline),
         "entries": report_entries,
         "bd_metrics": bd_metrics,
         "baseline_environment": baseline_env,
-        "experimental_environment": experimental_env,
+        "test_environment": test_env,
     }
 
     if job:

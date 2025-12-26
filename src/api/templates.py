@@ -52,7 +52,7 @@ async def create_template(request: CreateTemplateRequest) -> CreateTemplateRespo
 
     # 显式转换为 TemplateSideConfig，避免 Pydantic 类型不匹配
     baseline_cfg = TemplateSideConfig(**request.baseline.model_dump())
-    experimental_cfg = TemplateSideConfig(**request.experimental.model_dump())
+    test_cfg = TemplateSideConfig(**request.test.model_dump())
 
     # 创建模板元数据
     metadata = EncodingTemplateMetadata(
@@ -60,7 +60,7 @@ async def create_template(request: CreateTemplateRequest) -> CreateTemplateRespo
         name=request.name,
         description=request.description,
         baseline=baseline_cfg,
-        experimental=experimental_cfg,
+        test=test_cfg,
     )
     metadata.baseline_fingerprint = _fingerprint(metadata.baseline)
 
@@ -120,8 +120,8 @@ async def list_templates(
             template_type=t.metadata.template_type.value,
             baseline_source_dir=t.metadata.baseline.source_dir,
             baseline_bitstream_dir=t.metadata.baseline.bitstream_dir,
-            experimental_source_dir=t.metadata.experimental.source_dir if t.metadata.experimental else None,
-            experimental_bitstream_dir=t.metadata.experimental.bitstream_dir if t.metadata.experimental else None,
+            test_source_dir=t.metadata.test.source_dir if t.metadata.test else None,
+            test_bitstream_dir=t.metadata.test.bitstream_dir if t.metadata.test else None,
             baseline_computed=t.metadata.baseline_computed,
         )
         for t in templates
@@ -154,8 +154,8 @@ async def update_template(
     if request.baseline is not None:
         template.metadata.baseline = TemplateSideConfig(**request.baseline.model_dump())
         baseline_changed = True
-    if request.experimental is not None:
-        template.metadata.experimental = TemplateSideConfig(**request.experimental.model_dump())
+    if request.test is not None:
+        template.metadata.test = TemplateSideConfig(**request.test.model_dump())
 
     if baseline_changed:
         template.metadata.baseline_computed = False
@@ -211,7 +211,7 @@ async def validate_template(template_id: str) -> ValidateTemplateResponse:
         raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
 
     b = template.metadata.baseline
-    e = template.metadata.experimental
+    e = template.metadata.test
     source_ok = dir_exists(b.source_dir) and dir_exists(e.source_dir)
     output_ok = dir_writable(b.bitstream_dir) and dir_writable(e.bitstream_dir)
 

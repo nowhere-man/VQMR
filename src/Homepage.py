@@ -36,7 +36,7 @@ def _list_template_jobs(limit: int = 20) -> List[Dict]:
 
 
 def _set_job_query_param(job_id: str) -> None:
-    """使用新的 st.query_params API 设置 job_id，避免 old experimental API 冲突。"""
+    """使用新的 st.query_params API 设置 job_id，避免 old test API 冲突。"""
     try:
         if st.query_params.get("job_id") != job_id:
             st.query_params["job_id"] = job_id

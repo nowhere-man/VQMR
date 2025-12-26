@@ -40,7 +40,7 @@ async def create_metrics_template(request: CreateMetricsTemplateRequest) -> dict
         description=request.description,
         template_type=TemplateType.METRICS_ANALYSIS,
         baseline=cfg,
-        experimental=None,
+        test=None,
     )
     try:
         template_storage.create_template(metadata)

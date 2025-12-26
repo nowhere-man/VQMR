@@ -180,7 +180,7 @@ def create_cpu_chart(
     agg_interval: int,
     title: str,
     base_label: str = "Baseline",
-    exp_label: str = "Experimental",
+    exp_label: str = "Test",
     base_color: str = "#2563eb",
     exp_color: str = "#dc2626",
 ) -> go.Figure:
