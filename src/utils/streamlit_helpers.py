@@ -520,6 +520,7 @@ def render_overall_section(
     bd_list: List[Dict[str, Any]],
     base_label: str = "Baseline",
     exp_label: str = "Test",
+    show_bd: bool = True,
 ) -> None:
     """
     渲染 Overall 汇总部分
@@ -530,6 +531,7 @@ def render_overall_section(
         bd_list: BD-Rate/BD-Metrics 数据列表
         base_label: 基准组标签
         exp_label: 实验组标签
+        show_bd: 是否展示 BD-Rate / BD-Metrics 汇总
     """
     if df_metrics.empty:
         st.info("暂无可用的指标数据。")
@@ -543,57 +545,58 @@ def render_overall_section(
         return
 
     # ===== BD-Rate / BD-Metrics =====
-    if bd_list:
-        df_bd = pd.DataFrame(bd_list)
-        bd_psnr_avg, bd_psnr_max, bd_psnr_min = _summary_stats(df_bd["bd_rate_psnr"])
-        bd_ssim_avg, bd_ssim_max, bd_ssim_min = _summary_stats(df_bd["bd_rate_ssim"])
-        bd_vmaf_avg, bd_vmaf_max, bd_vmaf_min = _summary_stats(df_bd["bd_rate_vmaf"])
-        bd_vmaf_neg_avg, bd_vmaf_neg_max, bd_vmaf_neg_min = _summary_stats(df_bd["bd_rate_vmaf_neg"])
+    if show_bd:
+        if bd_list:
+            df_bd = pd.DataFrame(bd_list)
+            bd_psnr_avg, bd_psnr_max, bd_psnr_min = _summary_stats(df_bd["bd_rate_psnr"])
+            bd_ssim_avg, bd_ssim_max, bd_ssim_min = _summary_stats(df_bd["bd_rate_ssim"])
+            bd_vmaf_avg, bd_vmaf_max, bd_vmaf_min = _summary_stats(df_bd["bd_rate_vmaf"])
+            bd_vmaf_neg_avg, bd_vmaf_neg_max, bd_vmaf_neg_min = _summary_stats(df_bd["bd_rate_vmaf_neg"])
 
-        bd_rate_df = pd.DataFrame(
-            {
-                "平均": [bd_psnr_avg, bd_ssim_avg, bd_vmaf_avg, bd_vmaf_neg_avg],
-                "最大": [bd_psnr_max, bd_ssim_max, bd_vmaf_max, bd_vmaf_neg_max],
-                "最小": [bd_psnr_min, bd_ssim_min, bd_vmaf_min, bd_vmaf_neg_min],
-            },
-            index=["PSNR", "SSIM", "VMAF", "VMAF-NEG"],
-        )
-
-        bd_m_psnr_avg, bd_m_psnr_max, bd_m_psnr_min = _summary_stats(df_bd["bd_psnr"])
-        bd_m_ssim_avg, bd_m_ssim_max, bd_m_ssim_min = _summary_stats(df_bd["bd_ssim"])
-        bd_m_vmaf_avg, bd_m_vmaf_max, bd_m_vmaf_min = _summary_stats(df_bd["bd_vmaf"])
-        bd_m_vmaf_neg_avg, bd_m_vmaf_neg_max, bd_m_vmaf_neg_min = _summary_stats(df_bd["bd_vmaf_neg"])
-
-        bd_metrics_df = pd.DataFrame(
-            {
-                "平均": [bd_m_psnr_avg, bd_m_ssim_avg, bd_m_vmaf_avg, bd_m_vmaf_neg_avg],
-                "最大": [bd_m_psnr_max, bd_m_ssim_max, bd_m_vmaf_max, bd_m_vmaf_neg_max],
-                "最小": [bd_m_psnr_min, bd_m_ssim_min, bd_m_vmaf_min, bd_m_vmaf_neg_min],
-            },
-            index=["PSNR", "SSIM", "VMAF", "VMAF-NEG"],
-        )
-
-        bd_rate_col, bd_metrics_col = st.columns(2)
-        with bd_rate_col:
-            _render_overall_table(
-                "BD-Rate",
-                bd_rate_df,
-                "+.2f",
-                "%",
-                ("red", "green"),
-                empty_text="暂无 BD-Rate 数据。",
+            bd_rate_df = pd.DataFrame(
+                {
+                    "平均": [bd_psnr_avg, bd_ssim_avg, bd_vmaf_avg, bd_vmaf_neg_avg],
+                    "最大": [bd_psnr_max, bd_ssim_max, bd_vmaf_max, bd_vmaf_neg_max],
+                    "最小": [bd_psnr_min, bd_ssim_min, bd_vmaf_min, bd_vmaf_neg_min],
+                },
+                index=["PSNR", "SSIM", "VMAF", "VMAF-NEG"],
             )
-        with bd_metrics_col:
-            _render_overall_table(
-                "BD-Metrics",
-                bd_metrics_df,
-                "+.4f",
-                "",
-                ("green", "red"),
-                empty_text="暂无 BD-Metrics 数据。",
+
+            bd_m_psnr_avg, bd_m_psnr_max, bd_m_psnr_min = _summary_stats(df_bd["bd_psnr"])
+            bd_m_ssim_avg, bd_m_ssim_max, bd_m_ssim_min = _summary_stats(df_bd["bd_ssim"])
+            bd_m_vmaf_avg, bd_m_vmaf_max, bd_m_vmaf_min = _summary_stats(df_bd["bd_vmaf"])
+            bd_m_vmaf_neg_avg, bd_m_vmaf_neg_max, bd_m_vmaf_neg_min = _summary_stats(df_bd["bd_vmaf_neg"])
+
+            bd_metrics_df = pd.DataFrame(
+                {
+                    "平均": [bd_m_psnr_avg, bd_m_ssim_avg, bd_m_vmaf_avg, bd_m_vmaf_neg_avg],
+                    "最大": [bd_m_psnr_max, bd_m_ssim_max, bd_m_vmaf_max, bd_m_vmaf_neg_max],
+                    "最小": [bd_m_psnr_min, bd_m_ssim_min, bd_m_vmaf_min, bd_m_vmaf_neg_min],
+                },
+                index=["PSNR", "SSIM", "VMAF", "VMAF-NEG"],
             )
-    else:
-        st.info("暂无 BD-Rate / BD-Metrics 数据。")
+
+            bd_rate_col, bd_metrics_col = st.columns(2)
+            with bd_rate_col:
+                _render_overall_table(
+                    "BD-Rate",
+                    bd_rate_df,
+                    "+.2f",
+                    "%",
+                    ("red", "green"),
+                    empty_text="暂无 BD-Rate 数据。",
+                )
+            with bd_metrics_col:
+                _render_overall_table(
+                    "BD-Metrics",
+                    bd_metrics_df,
+                    "+.4f",
+                    "",
+                    ("green", "red"),
+                    empty_text="暂无 BD-Metrics 数据。",
+                )
+        else:
+            st.info("暂无 BD-Rate / BD-Metrics 数据。")
 
     point_label_col, point_select_col, point_spacer_col = st.columns([1, 2, 6])
     with point_label_col:

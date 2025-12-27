@@ -330,19 +330,19 @@ async def build_bitstream_report(
         vmaf_data = parse_vmaf_log(vmaf_csv)
         # 清理中间文件
         try:
-            # if psnr_log.exists():
-            #     psnr_log.unlink()
-            # if ssim_log.exists():
-            #     ssim_log.unlink()
-            # if vmaf_csv.exists():
-            #     vmaf_csv.unlink()
-            # 清理转换后的 yuv（仅当非原始输入或缩放过时）
+            if psnr_log.exists():
+                psnr_log.unlink()
+            if ssim_log.exists():
+                ssim_log.unlink()
+            if vmaf_csv.exists():
+                vmaf_csv.unlink()
+            # 清理转换后的 yuv
             if enc_yuv.exists() and enc_yuv != enc_input:
                 enc_yuv.unlink()
         except Exception:
             logger.warning("清理中间文件失败", exc_info=True)
 
-        # 2.5 码率/帧结构（Encoded 原始文件）
+        # 2.5 码率/帧结构
         frame_types: List[str] = []
         frame_sizes: List[int] = []
         frame_timestamps: List[float] = []

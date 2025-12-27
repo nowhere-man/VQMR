@@ -188,23 +188,31 @@ if df.empty:
     st.stop()
 
 df = df.sort_values(by=["Video", "RC", "Point", "Side"])
+point_count = df["Point"].dropna().nunique()
+has_bd = point_count >= 4
 
 # ========== 侧边栏目录 ==========
 with st.sidebar:
     st.markdown("### 📑 Contents")
-    st.markdown("""
-- [Overall](#overall)
-- [Metrics](#metrics)
-  - [A vs B 对比](#a-vs-b-对比)
-- [BD-Rate](#bd-rate)
-- [BD-Metrics](#bd-metrics)
-- [Performance](#performance)
-  - [Delta](#perf-diff)
-  - [CPU Usage](#cpu-chart)
-  - [FPS](#fps-chart)
-  - [Details](#perf-details)
-- [Machine Info](#环境信息)
-""", unsafe_allow_html=True)
+    contents = [
+        "- [Overall](#overall)",
+        "- [Metrics](#metrics)",
+        "  - [A vs B 对比](#a-vs-b-对比)",
+    ]
+    if has_bd:
+        contents += [
+            "- [BD-Rate](#bd-rate)",
+            "- [BD-Metrics](#bd-metrics)",
+        ]
+    contents += [
+        "- [Performance](#performance)",
+        "  - [Delta](#perf-diff)",
+        "  - [CPU Usage](#cpu-chart)",
+        "  - [FPS](#fps-chart)",
+        "  - [Details](#perf-details)",
+        "- [Machine Info](#环境信息)",
+    ]
+    st.markdown("\n".join(contents), unsafe_allow_html=True)
 
 # 平滑滚动 CSS
 st.markdown("""
@@ -215,28 +223,25 @@ html {
 </style>
 """, unsafe_allow_html=True)
 
-# 构建 BD-Rate/BD-Metrics 数据
-base_df = df[df["Side"] == "A"]
-exp_df = df[df["Side"] == "B"]
-merged = base_df.merge(exp_df, on=["Video", "RC", "Point"], suffixes=("_base", "_exp"))
-bd_rate_rows, bd_metric_rows = _build_bd_rows(df)
-
-# 转换为 render_overall_section 需要的格式
-bd_list_for_overall = []
-if bd_rate_rows and bd_metric_rows:
-    for i, rate_row in enumerate(bd_rate_rows):
-        metric_row = bd_metric_rows[i] if i < len(bd_metric_rows) else {}
-        bd_list_for_overall.append({
-            "source": rate_row.get("Video"),
-            "bd_rate_psnr": rate_row.get("BD-Rate PSNR (%)"),
-            "bd_rate_ssim": rate_row.get("BD-Rate SSIM (%)"),
-            "bd_rate_vmaf": rate_row.get("BD-Rate VMAF (%)"),
-            "bd_rate_vmaf_neg": rate_row.get("BD-Rate VMAF-NEG (%)"),
-            "bd_psnr": metric_row.get("BD PSNR"),
-            "bd_ssim": metric_row.get("BD SSIM"),
-            "bd_vmaf": metric_row.get("BD VMAF"),
-            "bd_vmaf_neg": metric_row.get("BD VMAF-NEG"),
-        })
+bd_list_for_overall: List[Dict[str, Any]] = []
+bd_rate_rows: List[Dict[str, Any]] = []
+bd_metric_rows: List[Dict[str, Any]] = []
+if has_bd:
+    bd_rate_rows, bd_metric_rows = _build_bd_rows(df)
+    if bd_rate_rows and bd_metric_rows:
+        for i, rate_row in enumerate(bd_rate_rows):
+            metric_row = bd_metric_rows[i] if i < len(bd_metric_rows) else {}
+            bd_list_for_overall.append({
+                "source": rate_row.get("Video"),
+                "bd_rate_psnr": rate_row.get("BD-Rate PSNR (%)"),
+                "bd_rate_ssim": rate_row.get("BD-Rate SSIM (%)"),
+                "bd_rate_vmaf": rate_row.get("BD-Rate VMAF (%)"),
+                "bd_rate_vmaf_neg": rate_row.get("BD-Rate VMAF-NEG (%)"),
+                "bd_psnr": metric_row.get("BD PSNR"),
+                "bd_ssim": metric_row.get("BD SSIM"),
+                "bd_vmaf": metric_row.get("BD VMAF"),
+                "bd_vmaf_neg": metric_row.get("BD VMAF-NEG"),
+            })
 
 # ========== Overall ==========
 st.header("Overall", anchor="overall")
@@ -250,6 +255,7 @@ render_overall_section(
     bd_list=bd_list_for_overall,
     base_label="A",
     exp_label="B",
+    show_bd=has_bd,
 )
 
 st.header("Metrics", anchor="metrics")
@@ -327,18 +333,18 @@ if not merged.empty:
         hide_index=True,
     )
 
-st.header("BD-Rate", anchor="bd-rate")
-bd_rate_rows, bd_metric_rows = _build_bd_rows(merged)
-if bd_rate_rows:
-    st.dataframe(pd.DataFrame(bd_rate_rows), use_container_width=True, hide_index=True)
-else:
-    st.info("无法计算 BD-Rate（点位不足或缺少共同视频）。")
+if has_bd:
+    st.header("BD-Rate", anchor="bd-rate")
+    if bd_rate_rows:
+        st.dataframe(pd.DataFrame(bd_rate_rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("无法计算 BD-Rate（点位不足或缺少共同视频）。")
 
-st.header("BD-Metrics", anchor="bd-metrics")
-if bd_metric_rows:
-    st.dataframe(pd.DataFrame(bd_metric_rows), use_container_width=True, hide_index=True)
-else:
-    st.info("无法计算 BD-Metrics（点位不足或缺少共同视频）。")
+    st.header("BD-Metrics", anchor="bd-metrics")
+    if bd_metric_rows:
+        st.dataframe(pd.DataFrame(bd_metric_rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("无法计算 BD-Metrics（点位不足或缺少共同视频）。")
 
 # ========== Performance ==========
 st.header("Performance", anchor="performance")
