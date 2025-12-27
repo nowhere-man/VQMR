@@ -1,8 +1,4 @@
-"""
-URL helpers
-
-集中构建跨端口访问的基础 URL（例如 Streamlit 报告），避免在模板里写死 localhost。
-"""
+"""URL helpers for building external-facing links."""
 from fastapi import Request
 
 from src.config import settings

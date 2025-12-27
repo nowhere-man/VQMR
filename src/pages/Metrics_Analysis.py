@@ -1,26 +1,20 @@
-"""
-Metrics 分析任务对比（选择两个 Metrics 分析任务，实时生成对比报告，不落盘）
-"""
+"""Metrics 分析任务对比（选择两个 Metrics 分析任务，实时生成对比报告，不落盘）。"""
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 
-from src.utils.bd_rate import bd_rate as _bd_rate, bd_metrics as _bd_metrics
+from src.shared.bd_utils import build_bd_rows
 from src.utils.streamlit_helpers import (
-    jobs_root_dir as _jobs_root_dir,
     list_jobs,
     load_json_report,
     parse_rate_point as _parse_point,
@@ -28,6 +22,10 @@ from src.utils.streamlit_helpers import (
     render_overall_section,
 )
 from src.services.template_storage import template_storage
+from src.utils.streamlit_metrics_components import (
+    inject_smooth_scroll_css,
+    render_performance_section,
+)
 
 
 def _list_metrics_jobs(limit: int = 100) -> List[Dict[str, Any]]:
@@ -129,56 +127,6 @@ def _build_rows(data: Dict[str, Any], side_label: str) -> Tuple[List[Dict[str, A
     return rows, perf_rows
 
 
-def _build_bd_rows(df: pd.DataFrame) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    bd_rate_rows: List[Dict[str, Any]] = []
-    bd_metric_rows: List[Dict[str, Any]] = []
-    grouped = df.groupby("Video")
-    for video, g in grouped:
-        anchor = g[g["Side"] == "Anchor"]
-        test = g[g["Side"] == "Test"]
-        if anchor.empty or test.empty:
-            continue
-        merge = anchor.merge(test, on=["Video", "RC", "Point"], suffixes=("_anchor", "_test"))
-        if merge.empty:
-            continue
-        def _collect(col_anchor: str, col_test: str) -> Tuple[List[float], List[float], List[float], List[float]]:
-            merged = merge.dropna(subset=[col_anchor, col_test, "Bitrate_kbps_anchor", "Bitrate_kbps_test"])
-            if merged.empty:
-                return [], [], [], []
-            return (
-                merged["Bitrate_kbps_anchor"].tolist(),
-                merged[col_anchor].tolist(),
-                merged["Bitrate_kbps_test"].tolist(),
-                merged[col_test].tolist(),
-            )
-
-        anchor_rates, anchor_psnr, test_rates, test_psnr = _collect("PSNR_anchor", "PSNR_test")
-        _, anchor_ssim, _, test_ssim = _collect("SSIM_anchor", "SSIM_test")
-        _, anchor_vmaf, _, test_vmaf = _collect("VMAF_anchor", "VMAF_test")
-        _, anchor_vn, _, test_vn = _collect("VMAF-NEG_anchor", "VMAF-NEG_test")
-        # BD-Rate
-        bd_rate_rows.append(
-            {
-                "Video": video,
-                "BD-Rate PSNR (%)": _bd_rate(anchor_rates, anchor_psnr, test_rates, test_psnr),
-                "BD-Rate SSIM (%)": _bd_rate(anchor_rates, anchor_ssim, test_rates, test_ssim),
-                "BD-Rate VMAF (%)": _bd_rate(anchor_rates, anchor_vmaf, test_rates, test_vmaf),
-                "BD-Rate VMAF-NEG (%)": _bd_rate(anchor_rates, anchor_vn, test_rates, test_vn),
-            }
-        )
-        # BD-Metrics
-        bd_metric_rows.append(
-            {
-                "Video": video,
-                "BD PSNR": _bd_metrics(anchor_rates, anchor_psnr, test_rates, test_psnr),
-                "BD SSIM": _bd_metrics(anchor_rates, anchor_ssim, test_rates, test_ssim),
-                "BD VMAF": _bd_metrics(anchor_rates, anchor_vmaf, test_rates, test_vmaf),
-                "BD VMAF-NEG": _bd_metrics(anchor_rates, anchor_vn, test_rates, test_vn),
-            }
-        )
-    return bd_rate_rows, bd_metric_rows
-
-
 st.set_page_config(page_title="Metrics分析", page_icon="📊", layout="wide")
 
 st.markdown("<h1 style='text-align:center;'>📊 Metrics分析</h1>", unsafe_allow_html=True)
@@ -271,7 +219,7 @@ bd_list_for_overall: List[Dict[str, Any]] = []
 bd_rate_rows: List[Dict[str, Any]] = []
 bd_metric_rows: List[Dict[str, Any]] = []
 if has_bd:
-    bd_rate_rows, bd_metric_rows = _build_bd_rows(df)
+    bd_rate_rows, bd_metric_rows = build_bd_rows(df)
     if bd_rate_rows and bd_metric_rows:
         for i, rate_row in enumerate(bd_rate_rows):
             metric_row = bd_metric_rows[i] if i < len(bd_metric_rows) else {}

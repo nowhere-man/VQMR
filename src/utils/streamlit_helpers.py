@@ -1,7 +1,6 @@
-"""
-Streamlit 页面公共工具模块
+"""Streamlit 页面公共工具模块。
 
-提供任务列表加载、报告读取等公共函数
+提供任务列表加载、报告读取等公共函数。
 """
 import json
 import sys

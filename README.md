@@ -21,7 +21,7 @@ A video quality analysis tool for comparing video encoders using quality metrics
 ```bash
 # Clone the repository
 git clone https://github.com/nowhere-man/VMA.git
-cd VMR
+cd VMA
 
 # Create virtual environment and install dependencies
 uv venv
@@ -94,17 +94,39 @@ docker rm -f vma
 ## Project Structure
 
 ```
-VMR/
+VMA/
 ├── src/
-│   ├── api/          # FastAPI endpoints
-│   ├── services/     # Core business logic
-│   ├── pages/        # Streamlit report pages
-│   ├── templates/    # Jinja2 HTML templates
-│   └── utils/        # Utility modules
-├── docker/           # Docker build files
-├── jobs/             # Job output directory
-└── run.sh            # Startup script
+│   ├── domain/                 # Pure business logic (no I/O)
+│   │   ├── models/             # Job, Template, Metrics models
+│   │   └── services/           # BD-Rate calculation, metrics parsing
+│   ├── application/            # Use-cases and orchestration
+│   │   ├── job_processor.py    # Background job processing
+│   │   ├── template_executor.py # Template execution
+│   │   └── bitstream_analyzer.py # Bitstream analysis
+│   ├── infrastructure/         # External systems / I/O
+│   │   ├── ffmpeg/             # FFmpeg operations
+│   │   ├── persistence/        # JSON storage repositories
+│   │   └── filesystem/         # File operations
+│   ├── interfaces/             # External interfaces
+│   │   ├── api/                # FastAPI routers and schemas
+│   │   └── streamlit/          # Streamlit pages and components
+│   ├── config/                 # Configuration settings
+│   ├── shared/                 # Shared utilities
+│   ├── pages/                  # Streamlit report pages
+│   └── templates/              # Jinja2 HTML templates
+├── docker/                     # Docker build files
+├── jobs/                       # Job output directory
+└── run.sh                      # Startup script
 ```
+
+### Architecture Layers
+
+| Layer | Purpose | Can Import From |
+|-------|---------|-----------------|
+| `domain` | Pure business logic, models | Nothing |
+| `application` | Use-cases, orchestration | domain |
+| `infrastructure` | External I/O (FFmpeg, storage) | domain |
+| `interfaces` | API, UI | domain, application, infrastructure |
 
 ## API Endpoints
 

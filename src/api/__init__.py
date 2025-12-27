@@ -1,16 +1,12 @@
-"""
-API module
-
-提供 RESTful API 端点
-"""
-from .jobs import router as jobs_router
-from .pages import router as pages_router
-from .templates import router as templates_router
-from .metrics_analysis import router as metrics_analysis_router
+"""API module - backward compatibility layer."""
+from src.interfaces.api.routers.jobs import router as jobs_router
+from src.interfaces.api.routers.templates import router as templates_router
+from src.interfaces.api.routers.metrics_analysis import router as metrics_analysis_router
+from src.interfaces.api.routers.pages import router as pages_router
 
 __all__ = [
     "jobs_router",
+    "metrics_analysis_router",
     "pages_router",
     "templates_router",
-    "metrics_analysis_router",
 ]

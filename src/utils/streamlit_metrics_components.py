@@ -1,5 +1,4 @@
-"""
-Streamlit UI 复用组件
+"""Streamlit UI 复用组件。
 
 提取 Metrics 页面常用片段（平滑滚动样式、性能对比区域），减少重复代码。
 """

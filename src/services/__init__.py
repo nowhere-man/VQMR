@@ -1,17 +1,10 @@
-"""
-Services module
-
-提供核心业务逻辑服务
-"""
-from .ffmpeg import FFmpegService, ffmpeg_service
-from .processor import TaskProcessor, task_processor
-from .storage import JobStorage, job_storage
+"""Services module - backward compatibility layer."""
+from src.infrastructure.persistence.job_repository import job_repository as job_storage
+from src.infrastructure.persistence.template_repository import template_repository as template_storage
+from src.application.job_processor import task_processor
 
 __all__ = [
-    "JobStorage",
     "job_storage",
-    "FFmpegService",
-    "ffmpeg_service",
-    "TaskProcessor",
     "task_processor",
+    "template_storage",
 ]
